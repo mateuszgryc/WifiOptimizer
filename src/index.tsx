@@ -513,10 +513,8 @@ function Content() {
         <PanelSectionRow>
           <div
             style={{
-              textAlign: "center",
               fontSize: "10px",
               color: "#4a4a5a",
-              width: "100%",
             }}
           >
             v0.3.1 - by jasonridesabike

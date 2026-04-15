@@ -436,10 +436,8 @@ function Content() {
                                 await resetSettings();
                                 await refreshStatus();
                             }, children: "Reset Settings" }) })] }), SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: {
-                            textAlign: "center",
                             fontSize: "10px",
                             color: "#4a4a5a",
-                            width: "100%",
                         }, children: ["v0.3.1 - by jasonridesabike", SP_JSX.jsx("br", {}), SP_JSX.jsx("br", {}), "If WiFi won't reconnect, a reboot usually fixes it.", SP_JSX.jsx("br", {}), "Bugs? Report at github.com/ArcadaLabs-Jason/WifiOptimizer"] }) }) })] }));
 }
 var index = definePlugin(() => {
