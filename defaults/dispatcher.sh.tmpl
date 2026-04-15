@@ -46,9 +46,17 @@ fi
 # Apply power save
 if [ "$POWER_SAVE" = "True" ]; then
     /usr/bin/iw dev "$IFACE" set power_save off 2>/dev/null
-    # LCD (RTL8822CE): disable deep LPS and PCIe ASPM (silently no-ops on OLED)
+    # LCD (RTL8822CE): disable deep LPS and driver ASPM (silently no-ops on OLED)
     echo Y > /sys/module/rtw88_core/parameters/disable_lps_deep 2>/dev/null
     echo Y > /sys/module/rtw88_pci/parameters/disable_aspm 2>/dev/null
+    # Both: disable PCIe ASPM for WiFi device (prevents streaming throughput degradation)
+    WIFI_PCI=$(readlink -f /sys/class/net/"$IFACE"/device 2>/dev/null)
+    if [ -d "$WIFI_PCI/link" ]; then
+        for f in l0s_aspm l1_aspm l1_1_aspm l1_2_aspm l1_1_pcipm l1_2_pcipm; do
+            echo 0 > "$WIFI_PCI/link/$f" 2>/dev/null
+        done
+        echo on > "$WIFI_PCI/power/control" 2>/dev/null
+    fi
     logger -t "$LOG_TAG" "power_save off applied to $IFACE"
 fi
 

@@ -209,6 +209,45 @@ class Plugin:
             except FileNotFoundError:
                 pass
 
+    def _apply_pcie_aspm_fix(self, enable: bool):
+        """Disable or restore PCIe ASPM for the WiFi device.
+        Prevents throughput degradation during sustained streaming (OLED ath11k).
+        Also prevents LCD rtw88 PCIe stalls. Works on both models."""
+        try:
+            # Discover WiFi PCI device path dynamically
+            iface = self._get_wifi_interface() or "wlan0"
+            device_link = os.path.realpath(f"/sys/class/net/{iface}/device")
+            if not os.path.isdir(device_link):
+                return
+
+            # Disable/restore PCIe ASPM L-states
+            link_dir = os.path.join(device_link, "link")
+            if os.path.isdir(link_dir):
+                val = "0" if enable else "1"
+                for aspm_file in ["l0s_aspm", "l1_aspm", "l1_1_aspm", "l1_2_aspm",
+                                   "l1_1_pcipm", "l1_2_pcipm"]:
+                    path = os.path.join(link_dir, aspm_file)
+                    try:
+                        with open(path, "w") as f:
+                            f.write(val)
+                    except (FileNotFoundError, PermissionError):
+                        pass
+
+            # Disable/restore PCI runtime power management
+            power_control = os.path.join(device_link, "power", "control")
+            try:
+                with open(power_control, "w") as f:
+                    f.write("on" if enable else "auto")
+            except (FileNotFoundError, PermissionError):
+                pass
+
+            if enable:
+                decky.logger.info(f"PCIe ASPM disabled for {device_link}")
+            else:
+                decky.logger.info(f"PCIe ASPM restored for {device_link}")
+        except Exception as e:
+            decky.logger.error(f"PCIe ASPM fix error: {e}")
+
     def _install_dispatcher(self):
         try:
             template_path = os.path.join(
@@ -542,8 +581,10 @@ class Plugin:
                 except FileNotFoundError:
                     pass
 
-            # LCD: also disable deep LPS and PCIe ASPM (no-op on OLED)
+            # LCD: disable deep LPS and rtw88 ASPM (no-op on OLED)
             self._apply_rtw88_fixes(disabled)
+            # Both: disable PCIe ASPM for WiFi device (prevents throughput degradation)
+            self._apply_pcie_aspm_fix(disabled)
 
             # Save settings only after success
             settings = _load_settings()
@@ -1069,6 +1110,7 @@ class Plugin:
         try:
             # Revert runtime state
             self._apply_rtw88_fixes(False)
+            self._apply_pcie_aspm_fix(False)
             try:
                 os.remove(NM_CONF_PATH)
             except FileNotFoundError:

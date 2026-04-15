@@ -1,4 +1,4 @@
-# WiFi Optimizer v0.4.1
+# WiFi Optimizer v0.5.0
 
 > **BETA - USE AT YOUR OWN RISK.** This plugin modifies WiFi and network settings. Some optimizations (band preference, custom DNS) can temporarily prevent WiFi from connecting. If this happens, a reboot usually fixes it. You can also try forgetting and rejoining your WiFi network from Steam settings. Testing has been done exclusively on the OLED model. LCD support is built in but untested - bug reports and feedback from LCD owners are especially welcome.
 
@@ -42,7 +42,7 @@ Want to go further? The remaining optimizations are available as individual togg
 
 | Optimization | What it does |
 |---|---|
-| Prevent lag spikes | Disables WiFi power management that causes packet batching and latency spikes. On LCD, also disables deep power save and PCIe ASPM that cause firmware lockups. |
+| Prevent lag spikes | Disables WiFi power management and PCIe power states that cause packet batching, latency spikes, and throughput degradation during sustained streaming. |
 | Stop background scanning | Locks to your current access point so the Deck stops scanning for other networks every 2 minutes. Disable before switching networks or if you use a mesh/multi-AP setup and need to roam. |
 | Auto-fix on wake | Installs a script that reapplies your settings every time WiFi reconnects - works even if Decky isn't running |
 | Network buffer tuning | Increases kernel buffer sizes and TX queue length to handle bursty streaming traffic without dropping packets |

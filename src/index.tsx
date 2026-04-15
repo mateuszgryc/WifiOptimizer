@@ -541,7 +541,7 @@ function Content() {
       <PanelSection>
         <PanelSectionRow>
           <div style={{ fontSize: "10px", color: "#4a4a5a" }}>
-            v0.4.1 - by jasonridesabike
+            v0.5.0 - by jasonridesabike
           </div>
         </PanelSectionRow>
         <PanelSectionRow>
