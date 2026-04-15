@@ -38,6 +38,7 @@ export interface PluginStatus {
   success: boolean;
   connected: boolean;
   supported: boolean;
+  version?: string;
   settings: PluginSettings;
   live: LiveStatus;
   drift: Record<string, boolean>;
@@ -58,6 +59,16 @@ export interface OptimizeSafeResult extends MethodResult {
   total: number;
   applied: number;
   results: Record<string, MethodResult>;
+}
+
+export interface UpdateCheckResult {
+  success: boolean;
+  current_version?: string;
+  latest_version?: string;
+  update_available?: boolean;
+  release_url?: string;
+  error?: string;
+  message?: string;
 }
 
 export type BadgeStatus = "active" | "locked" | "set" | "drifted" | "off" | "error" | "unknown";

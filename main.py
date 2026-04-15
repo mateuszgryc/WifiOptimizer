@@ -383,6 +383,7 @@ class Plugin:
                 "success": True,
                 "connected": connected,
                 "supported": supported,
+                "version": decky.DECKY_PLUGIN_VERSION,
                 "settings": settings,
                 "live": {},
                 "drift": {},
@@ -1143,4 +1144,116 @@ class Plugin:
             return {"success": True, "message": "Settings reset to defaults"}
         except Exception as e:
             decky.logger.error(f"reset_settings error: {e}")
+            return {"success": False, "error": "unexpected", "message": str(e)}
+
+    # ---- Updates ----
+
+    async def check_for_update(self) -> dict:
+        """Check GitHub for a newer release."""
+        try:
+            current = decky.DECKY_PLUGIN_VERSION
+            result = self._run_cmd(
+                [
+                    "/usr/bin/curl", "-sL", "--max-time", "10",
+                    "-H", "Accept: application/vnd.github.v3+json",
+                    "https://api.github.com/repos/ArcadaLabs-Jason/WifiOptimizer/releases/latest",
+                ],
+                timeout=15,
+            )
+            if not result["success"] or not result["stdout"]:
+                return {
+                    "success": True,
+                    "current_version": current,
+                    "update_available": False,
+                }
+
+            data = json.loads(result["stdout"])
+            tag = data.get("tag_name", "")
+            latest = tag.lstrip("v")
+            if not latest:
+                return {
+                    "success": True,
+                    "current_version": current,
+                    "update_available": False,
+                }
+
+            current_tuple = tuple(int(x) for x in current.split("."))
+            latest_tuple = tuple(int(x) for x in latest.split("."))
+
+            return {
+                "success": True,
+                "current_version": current,
+                "latest_version": latest,
+                "update_available": latest_tuple > current_tuple,
+                "release_url": data.get("html_url", ""),
+            }
+        except Exception as e:
+            decky.logger.error(f"check_for_update error: {e}")
+            return {
+                "success": True,
+                "current_version": decky.DECKY_PLUGIN_VERSION,
+                "update_available": False,
+            }
+
+    async def apply_update(self) -> dict:
+        """Download and install the latest release, then restart Decky."""
+        try:
+            if not self._is_supported_device():
+                return {"success": False, "error": "unexpected", "message": "Unsupported device."}
+
+            # Get latest version info
+            info = await self.check_for_update()
+            if not info.get("update_available"):
+                return {"success": False, "message": "No update available."}
+
+            tag = f"v{info['latest_version']}"
+            plugin_dir = decky.DECKY_PLUGIN_DIR
+
+            # Write a self-contained update script that survives plugin_loader restart
+            script = f"""#!/bin/bash
+sleep 2
+TAG="{tag}"
+PLUGIN_DIR="{plugin_dir}"
+TMP=$(mktemp -d)
+cleanup() {{ rm -rf "$TMP"; rm -f "$0"; }}
+trap cleanup EXIT
+
+curl -sL "https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/tags/${{TAG}}.tar.gz" -o "$TMP/update.tar.gz"
+tar xzf "$TMP/update.tar.gz" -C "$TMP"
+SRC="$TMP/WifiOptimizer-${{TAG#v}}"
+
+if [ ! -f "$SRC/plugin.json" ]; then
+    logger -t wifi-optimizer "Update failed: download error"
+    exit 1
+fi
+
+cp "$SRC/plugin.json" "$PLUGIN_DIR/"
+cp "$SRC/package.json" "$PLUGIN_DIR/"
+cp "$SRC/main.py" "$PLUGIN_DIR/"
+cp "$SRC/decky.pyi" "$PLUGIN_DIR/"
+mkdir -p "$PLUGIN_DIR/dist" "$PLUGIN_DIR/defaults"
+cp "$SRC/dist/index.js" "$PLUGIN_DIR/dist/"
+cp "$SRC/dist/index.js.map" "$PLUGIN_DIR/dist/" 2>/dev/null || true
+cp "$SRC/defaults/dispatcher.sh.tmpl" "$PLUGIN_DIR/defaults/"
+
+logger -t wifi-optimizer "Updated to $TAG, restarting plugin_loader"
+systemctl restart plugin_loader 2>/dev/null || true
+"""
+            script_path = "/tmp/wifi-optimizer-update.sh"
+            with open(script_path, "w") as f:
+                f.write(script)
+            os.chmod(script_path, 0o700)
+
+            # Launch detached so it survives when plugin_loader kills us
+            subprocess.Popen(
+                ["/bin/bash", script_path],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            decky.logger.info(f"Update to {tag} initiated")
+            return {"success": True, "message": f"Updating to {tag}..."}
+        except Exception as e:
+            decky.logger.error(f"apply_update error: {e}")
             return {"success": False, "error": "unexpected", "message": str(e)}

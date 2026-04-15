@@ -12,7 +12,7 @@ import { definePlugin } from "@decky/api";
 import { FaWifi } from "react-icons/fa";
 
 import * as backend from "./backend";
-import type { PluginStatus, MethodResult, OptimizeSafeResult, BadgeStatus } from "./types";
+import type { PluginStatus, MethodResult, OptimizeSafeResult, UpdateCheckResult, BadgeStatus } from "./types";
 import { ERROR_MESSAGES } from "./types";
 import { InfoRow } from "./components/InfoRow";
 import { StatsGrid } from "./components/StatsGrid";
@@ -57,6 +57,9 @@ function Content() {
   const [applyingAll, setApplyingAll] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<OptimizeSafeResult | null>(null);
   const [customDnsInput, setCustomDnsInput] = useState("");
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const busyRef = useRef(false);
 
@@ -544,11 +547,58 @@ function Content() {
         </PanelSectionRow>
       </PanelSection>
 
+      {/* Updates */}
+      <PanelSection title="Updates">
+        {updating ? (
+          <PanelSectionRow>
+            <div style={{ fontSize: "12px", color: "#60baff" }}>
+              Updating... plugin will restart momentarily.
+            </div>
+          </PanelSectionRow>
+        ) : updateInfo?.update_available ? (
+          <>
+            <PanelSectionRow>
+              <div style={{ fontSize: "12px", color: "#3fc56e" }}>
+                v{updateInfo.latest_version} available (you have v{updateInfo.current_version})
+              </div>
+            </PanelSectionRow>
+            <PanelSectionRow>
+              <ButtonItem
+                layout="below"
+                onClick={async () => {
+                  setUpdating(true);
+                  try { await backend.applyUpdate(); } catch { /* restart killed connection */ }
+                }}
+              >
+                Update Now
+              </ButtonItem>
+            </PanelSectionRow>
+          </>
+        ) : (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              disabled={checkingUpdate}
+              onClick={async () => {
+                setCheckingUpdate(true);
+                try {
+                  const result = await backend.checkForUpdate();
+                  setUpdateInfo(result);
+                } catch { /* ignore */ }
+                setCheckingUpdate(false);
+              }}
+            >
+              {checkingUpdate ? "Checking..." : updateInfo ? "Up to date" : "Check for Updates"}
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+      </PanelSection>
+
       {/* Footer */}
       <PanelSection>
         <PanelSectionRow>
           <div style={{ fontSize: "10px", color: "#4a4a5a" }}>
-            v0.5.1 - by jasonridesabike
+            v{status?.version ?? "?"} - by jasonridesabike
           </div>
         </PanelSectionRow>
         <PanelSectionRow>

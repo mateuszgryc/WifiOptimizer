@@ -1,5 +1,5 @@
 import { callable } from "@decky/api";
-import type { PluginStatus, MethodResult, OptimizeSafeResult } from "./types";
+import type { PluginStatus, MethodResult, OptimizeSafeResult, UpdateCheckResult } from "./types";
 
 export const getStatus = callable<[], PluginStatus>("get_status");
 export const setPowerSave = callable<[disabled: boolean], MethodResult>("set_power_save");
@@ -12,3 +12,5 @@ export const setBufferTuning = callable<[enabled: boolean], MethodResult>("set_b
 export const optimizeSafe = callable<[], OptimizeSafeResult>("optimize_safe");
 export const reapplyAll = callable<[], OptimizeSafeResult>("reapply_all");
 export const resetSettings = callable<[], MethodResult>("reset_settings");
+export const checkForUpdate = callable<[], UpdateCheckResult>("check_for_update");
+export const applyUpdate = callable<[], MethodResult>("apply_update");

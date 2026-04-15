@@ -5,8 +5,6 @@
 set -e
 
 PLUGIN_NAME="WiFi Optimizer"
-REPO_URL="https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/heads/main.tar.gz"
-TMP_DIR=$(mktemp -d)
 
 # Check for root (needed to write to plugin dir and restart service)
 if [ "$(id -u)" -ne 0 ]; then
@@ -32,6 +30,22 @@ if [ ! -d "$PLUGIN_BASE" ]; then
     exit 1
 fi
 
+# Fetch latest release tag from GitHub
+echo "Checking for latest release..."
+LATEST_TAG=$(curl -sL "https://api.github.com/repos/ArcadaLabs-Jason/WifiOptimizer/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+
+if [ -z "$LATEST_TAG" ]; then
+    echo "Warning: Couldn't fetch latest release, falling back to main branch"
+    REPO_URL="https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/heads/main.tar.gz"
+    DIR_NAME="WifiOptimizer-main"
+else
+    echo "Latest release: $LATEST_TAG"
+    REPO_URL="https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/tags/${LATEST_TAG}.tar.gz"
+    DIR_NAME="WifiOptimizer-${LATEST_TAG#v}"
+fi
+
+TMP_DIR=$(mktemp -d)
+
 cleanup() {
     rm -rf "$TMP_DIR"
 }
@@ -44,7 +58,7 @@ echo "Downloading..."
 curl -sL "$REPO_URL" -o "$TMP_DIR/plugin.tar.gz"
 tar xzf "$TMP_DIR/plugin.tar.gz" -C "$TMP_DIR"
 
-SRC="$TMP_DIR/WifiOptimizer-main"
+SRC="$TMP_DIR/$DIR_NAME"
 if [ ! -f "$SRC/plugin.json" ]; then
     echo "Error: Download failed or repo structure changed."
     exit 1
