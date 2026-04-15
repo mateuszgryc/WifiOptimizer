@@ -382,7 +382,7 @@ function Content() {
         />
         <InfoRow
           label="Stop background scanning"
-          subtitle="Locks to your current access point (BSSID lock)"
+          subtitle="Locks to current AP - disable before switching networks"
           explanation="Your Steam Deck scans for other WiFi networks every 2 minutes even while connected. Each scan causes a brief interruption that can drop packets and stutter game streaming. Locking to your current access point stops these scans entirely. You'll need to disable this before switching to a different network or access point."
           {...getBadge(s?.bssid_lock_enabled ?? false, "bssid_lock", status, errors.bssid_lock ?? null, "locked")}
           checked={s?.bssid_lock_enabled ?? false}
