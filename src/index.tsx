@@ -508,6 +508,13 @@ function Content() {
 
       {/* Live status */}
       <PanelSection title="Live status">
+        {connected && status?.live?.ip_address && (
+          <PanelSectionRow>
+            <div style={{ fontSize: "10px", color: "#8a8a9a" }}>
+              IP: {status.live.ip_address}
+            </div>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <StatsGrid live={status?.live ?? {}} connected={connected} />
         </PanelSectionRow>
@@ -541,7 +548,7 @@ function Content() {
       <PanelSection>
         <PanelSectionRow>
           <div style={{ fontSize: "10px", color: "#4a4a5a" }}>
-            v0.5.0 - by jasonridesabike
+            v0.5.1 - by jasonridesabike
           </div>
         </PanelSectionRow>
         <PanelSectionRow>

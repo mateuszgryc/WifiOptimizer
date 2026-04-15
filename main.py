@@ -479,6 +479,17 @@ class Plugin:
             if settings.get("bssid_lock_enabled") and not current_bssid_lock:
                 status["drift"]["bssid_lock"] = True
 
+            # IP address
+            ip_result = self._run_cmd(
+                ["/usr/bin/nmcli", "-t", "-f", "IP4.ADDRESS", "dev", "show", iface],
+                timeout=T,
+            )
+            ip_out = ip_result.get("stdout", "")
+            # Format: IP4.ADDRESS[1]:192.168.1.100/24
+            if ":" in ip_out:
+                ip_addr = ip_out.split(":", 1)[1].split("/")[0].strip()
+                status["live"]["ip_address"] = ip_addr
+
             # DNS
             dns_result = self._run_cmd(
                 ["/usr/bin/nmcli", "-t", "-f", "IP4.DNS", "dev", "show", iface],

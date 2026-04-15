@@ -25,6 +25,7 @@ export interface LiveStatus {
   channel?: string;
   connected_bssid?: string;
   bssid_lock?: string;
+  ip_address?: string;
   dns?: string;
   ipv6_method?: string;
   band?: string;
