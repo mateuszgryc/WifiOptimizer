@@ -43,7 +43,7 @@ Want to go further? The remaining optimizations are available as individual togg
 | Optimization | What it does |
 |---|---|
 | Prevent lag spikes | Disables WiFi power management that causes packet batching and latency spikes. On LCD, also disables deep power save and PCIe ASPM that cause firmware lockups. |
-| Stop background scanning | Locks to your current access point so the Deck stops scanning for other networks every 2 minutes |
+| Stop background scanning | Locks to your current access point so the Deck stops scanning for other networks every 2 minutes. Disable before switching networks or if you use a mesh/multi-AP setup and need to roam. |
 | Auto-fix on wake | Installs a script that reapplies your settings every time WiFi reconnects - works even if Decky isn't running |
 | Network buffer tuning | Increases kernel buffer sizes and TX queue length to handle bursty streaming traffic without dropping packets |
 
