@@ -163,8 +163,11 @@ function Content() {
     backend.checkForUpdate().then(setUpdateInfo).catch(() => {});
   }, []);
 
-  const refreshStatus = useCallback(async () => {
-    if (busyRef.current) return;
+  const refreshStatus = useCallback(async (force: boolean = false) => {
+    // Background interval ticks defer while a user operation is in flight;
+    // handler-driven refreshes (at the end of an op) force through so the UI
+    // catches up immediately instead of waiting for the next interval tick.
+    if (!force && busyRef.current) return;
     try {
       const s = await backend.getStatus();
       setStatus(s);
@@ -208,7 +211,7 @@ function Content() {
             wifi_backend: s.result!.message! + detail,
           }));
         }
-        await refreshStatus();
+        await refreshStatus(true);
         setBackendSwitch(s);
         setBusy(false);
       } catch (e) {
@@ -405,7 +408,7 @@ function Content() {
       // Refresh before clearing busy so toggles/badges don't briefly flip to
       // stale pre-operation values in the interim render. Refresh runs even on
       // unexpected errors to keep UI consistent with backend state.
-      await refreshStatus();
+      await refreshStatus(true);
       setBusy(false);
     }
   };
@@ -438,7 +441,7 @@ function Content() {
     } finally {
       // Refresh before clearing applyingAll so button doesn't briefly flip to
       // "All good" from stale status. Refresh runs on errors too.
-      await refreshStatus();
+      await refreshStatus(true);
       setBusy(false);
       setApplyingAll(false);
     }
@@ -991,7 +994,7 @@ function Content() {
               try {
                 await backend.resetSettings();
               } finally {
-                await refreshStatus();
+                await refreshStatus(true);
                 setBusy(false);
               }
             }}
