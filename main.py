@@ -1259,11 +1259,16 @@ class Plugin:
             decky.logger.info(f"Update check: current={current}, channel={channel}")
 
             if channel == "beta":
-                # Fetch package.json from beta branch
+                # Use the GitHub contents API instead of raw.githubusercontent.com
+                # to bypass raw's CDN cache (typical 5-15 min TTL), which made
+                # beta updates appear unavailable immediately after a push.
+                # The `Accept: ...raw` header tells the API to return the file
+                # content directly instead of base64-wrapped JSON.
                 result = self._run_cmd(
                     [
                         "/usr/bin/curl", "-sL", "--max-time", "10",
-                        "https://raw.githubusercontent.com/ArcadaLabs-Jason/WifiOptimizer/beta/package.json",
+                        "-H", "Accept: application/vnd.github.raw+json",
+                        "https://api.github.com/repos/ArcadaLabs-Jason/WifiOptimizer/contents/package.json?ref=beta",
                     ],
                     timeout=15,
                     clean_env=True,

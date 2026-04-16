@@ -27,6 +27,7 @@ import { StatsGrid } from "./components/StatsGrid";
 const REFRESH_INTERVAL = 3000;
 const RECONNECT_DELAY = 4000;
 const BACKEND_POLL_INTERVAL = 750;
+const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
 
 const BACKEND_PHASE_TEXT: Record<BackendSwitchPhase, string> = {
   idle: "",
@@ -174,6 +175,16 @@ function Content() {
       backend.checkForUpdate().then(setUpdateInfo).catch(() => {});
     }
   }, [status?.connected]);
+
+  // Periodic update re-check — QAM often caches the panel across close/reopen,
+  // so the mount-effect check doesn't re-fire. This heartbeat catches new
+  // releases when the panel has been left open for a while.
+  useEffect(() => {
+    const id = setInterval(() => {
+      backend.checkForUpdate().then(setUpdateInfo).catch(() => {});
+    }, UPDATE_CHECK_INTERVAL);
+    return () => clearInterval(id);
+  }, []);
 
   const handleBackendToggle = async (on: boolean) => {
     const target = on ? "wpa_supplicant" : "iwd";
