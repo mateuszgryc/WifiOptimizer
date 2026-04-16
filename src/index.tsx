@@ -188,6 +188,11 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <div style={{ fontSize: "10px", color: "#6a6a7a" }}>
+            Version: {status?.version ?? "?"}
+          </div>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <div style={{ fontSize: "10px", color: "#6a6a7a" }}>
             Tap (i) on any toggle for details
           </div>
         </PanelSectionRow>
