@@ -21,7 +21,6 @@ except ImportError:
 DISPATCHER_PATH = "/etc/NetworkManager/dispatcher.d/99-wifi-optimizer"
 NM_CONF_PATH = "/etc/NetworkManager/conf.d/99-wifi-optimizer.conf"
 MODPROBE_CONF_PATH = "/etc/modprobe.d/99-wifi-optimizer.conf"
-BACKEND_TOOL = "/usr/bin/steamos-wifi-set-backend"
 BACKEND_HELPER = "/usr/bin/steamos-polkit-helpers/steamos-wifi-set-backend-privileged"
 WIFI_BACKEND_CONF = "/etc/NetworkManager/conf.d/99-valve-wifi-backend.conf"
 NM_DEFAULT_CONF = "/usr/lib/NetworkManager/conf.d/10-steamos-defaults.conf"
@@ -1666,4 +1665,19 @@ systemctl restart plugin_loader 2>/dev/null || true
             }
         except Exception as e:
             decky.logger.error(f"get_backend_switch_status error: {e}")
-            return {"success": False, "message": str(e)}
+            # Return a complete shape so the frontend's poll handler hits the
+            # terminal branch cleanly and surfaces the error to the user rather
+            # than silently stopping with no feedback.
+            return {
+                "success": False,
+                "in_progress": False,
+                "phase": "failed",
+                "target": None,
+                "started_at": 0,
+                "result": {
+                    "success": False,
+                    "target": "",
+                    "message": f"Couldn't read backend switch status: {e}",
+                },
+                "message": str(e),
+            }
