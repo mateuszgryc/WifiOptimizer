@@ -466,10 +466,10 @@ function Content() {
                             }, children: "Reset Settings" }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Update channel", rgOptions: [
                                 { data: "stable", label: "Stable" },
                                 { data: "beta", label: "Beta" },
-                            ], selectedOption: s?.update_channel ?? "stable", onChange: (option) => {
-                                setUpdateChannel(option.data);
+                            ], selectedOption: s?.update_channel ?? "stable", onChange: async (option) => {
+                                await setUpdateChannel(option.data);
                                 setUpdateInfo(null);
-                                refreshStatus();
+                                await refreshStatus();
                             } }) }), updating ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#60baff" }, children: "Updating... plugin will restart momentarily." }) })) : updateInfo?.update_available ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", color: "#3fc56e" }, children: ["v", updateInfo.latest_version, " available (you have v", updateInfo.current_version, ")"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: async () => {
                                         setUpdating(true);
                                         try {

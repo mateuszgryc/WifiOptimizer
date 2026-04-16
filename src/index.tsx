@@ -585,10 +585,10 @@ function Content() {
               { data: "beta", label: "Beta" },
             ]}
             selectedOption={s?.update_channel ?? "stable"}
-            onChange={(option: { data: string }) => {
-              backend.setUpdateChannel(option.data);
+            onChange={async (option: { data: string }) => {
+              await backend.setUpdateChannel(option.data);
               setUpdateInfo(null);
-              refreshStatus();
+              await refreshStatus();
             }}
           />
         </PanelSectionRow>
