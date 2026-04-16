@@ -1,8 +1,8 @@
 # WiFi Optimizer v0.8.0
 
-> **BETA - USE AT YOUR OWN RISK.** This plugin modifies WiFi and network settings. Some optimizations (band preference, custom DNS) can temporarily prevent WiFi from connecting. If this happens, a reboot usually fixes it. You can also try forgetting and rejoining your WiFi network from Steam settings. Testing has been done exclusively on the OLED model. LCD support is built in but untested - bug reports and feedback from LCD owners are especially welcome.
+> **Heads up:** This plugin modifies WiFi and network settings. Some optimizations (band preference, custom DNS, WiFi backend switch) can temporarily prevent WiFi from connecting. If this happens, a reboot usually fixes it. You can also try forgetting and rejoining your WiFi network from Steam settings.
 
-A [Decky Loader](https://decky.xyz/) plugin for Steam Deck that fixes WiFi problems that cause lag, stuttering, and dropped connections during game streaming. Benefits any streaming over WiFi - Steam Remote Play, [Moonlight](https://moonlight-stream.org/) / [Sunshine](https://app.lizardbyte.dev/Sunshine/), Parsec, Chiaki, and more.
+A [Decky Loader](https://decky.xyz/) plugin for Steam Deck that fixes WiFi problems that cause lag, stuttering, and dropped connections during game streaming. Benefits any streaming over WiFi - Steam Remote Play, [Moonlight](https://moonlight-stream.org/) / [Sunshine](https://app.lizardbyte.dev/Sunshine/), Parsec, Chiaki, and more. Works on both Steam Deck LCD and OLED.
 
 ## The problem
 
@@ -36,7 +36,7 @@ Switch back to Game Mode. Open the Quick Access Menu (**...** button) > Decky > 
    - Tunes network buffers (handles streaming traffic bursts)
 3. That's it. The plugin maintains these settings automatically, even after sleep/wake and SteamOS updates.
 
-Want to go further? The remaining optimizations are available as individual toggles - each one has an **(i)** icon you can tap for a full explanation of what it does and any tradeoffs.
+Want to go further? The remaining optimizations are available as individual toggles - each one has an **(i)** icon you can tap for a full explanation of what it does and any tradeoffs. Advanced options include forcing 5/6 GHz, custom DNS, disabling IPv6, and switching between the `iwd` and `wpa_supplicant` WiFi backends.
 
 ## All optimizations
 
@@ -56,16 +56,17 @@ Want to go further? The remaining optimizations are available as individual togg
 | Force 5 GHz / 6 GHz | Locks WiFi to the higher-frequency band to avoid Bluetooth interference | Won't connect if your network is 2.4 GHz only |
 | Custom DNS | Overrides your ISP's DNS with Cloudflare, Google, Quad9, or custom servers | Requires choosing a provider |
 | Disable IPv6 | Forces all traffic through IPv4 | Only helps on networks with broken IPv6 - most are fine |
+| WiFi backend (iwd / wpa_supplicant) | Switches between SteamOS's default `iwd` and the older `wpa_supplicant`. Some OLED owners find wpa_supplicant more stable across sleep/wake and 5 GHz. | Requires SteamOS 3.6+; some networks (certain WPA3, enterprise setups) behave differently between the two |
 
 ## Hardware support
 
-Works on both Steam Deck models. The OLED model benefits more because its WiFi degrades severely after sleep/wake without these fixes.
+Works on both Steam Deck models. OLED owners tend to see the biggest improvement since its ath11k driver is more sensitive to sleep/wake cycles.
 
 | | LCD | OLED |
 |---|---|---|
 | WiFi | WiFi 5 (RTL8822CE) | WiFi 6E (QCA206X) |
 | Driver | rtw88 | ath11k_pci |
-| Post-wake degradation | Mild | Severe |
+| Backend switch quirk | None | Switching from iwd to wpa_supplicant briefly drops wlan0; the plugin recreates it automatically |
 
 ## How it works
 
