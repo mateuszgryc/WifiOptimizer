@@ -319,10 +319,10 @@ function Content() {
     const [isBusy, setIsBusy] = SP_REACT.useState(false);
     const backendPollRef = SP_REACT.useRef(null);
     const busyRef = SP_REACT.useRef(false);
-    const setBusy = (val) => {
+    const setBusy = SP_REACT.useCallback((val) => {
         busyRef.current = val;
         setIsBusy(val);
-    };
+    }, []);
     const prevConnectedRef = SP_REACT.useRef(null);
     const lastUpdateCheckAtRef = SP_REACT.useRef(0);
     // Runs checkForUpdate with dedupe - skips if a check was issued within the
@@ -391,7 +391,7 @@ function Content() {
                 console.error("backend switch poll error", e);
             }
         }, BACKEND_POLL_INTERVAL);
-    }, [refreshStatus]);
+    }, [refreshStatus, setBusy]);
     // Main refresh interval, paused when the panel is hidden so we don't burn
     // CPU/battery on ~12 subprocess calls every 3s in the background. On return
     // to visible, run one refresh immediately to catch anything that changed
@@ -445,7 +445,7 @@ function Content() {
             if (backendPollRef.current)
                 clearInterval(backendPollRef.current);
         };
-    }, [beginBackendPoll, runUpdateCheck]);
+    }, [beginBackendPoll, runUpdateCheck, setBusy]);
     // Retry update check when connectivity recovers - the initial one-shot check
     // in the mount effect misses the case where the panel was already open when
     // the network came back. Skip until status has loaded to avoid a spurious

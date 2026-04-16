@@ -144,10 +144,10 @@ function Content() {
   const backendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const busyRef = useRef(false);
 
-  const setBusy = (val: boolean) => {
+  const setBusy = useCallback((val: boolean) => {
     busyRef.current = val;
     setIsBusy(val);
-  };
+  }, []);
   const prevConnectedRef = useRef<boolean | null>(null);
   const lastUpdateCheckAtRef = useRef<number>(0);
 
@@ -217,7 +217,7 @@ function Content() {
         console.error("backend switch poll error", e);
       }
     }, BACKEND_POLL_INTERVAL);
-  }, [refreshStatus]);
+  }, [refreshStatus, setBusy]);
 
   // Main refresh interval, paused when the panel is hidden so we don't burn
   // CPU/battery on ~12 subprocess calls every 3s in the background. On return
@@ -269,7 +269,7 @@ function Content() {
     return () => {
       if (backendPollRef.current) clearInterval(backendPollRef.current);
     };
-  }, [beginBackendPoll, runUpdateCheck]);
+  }, [beginBackendPoll, runUpdateCheck, setBusy]);
 
   // Retry update check when connectivity recovers - the initial one-shot check
   // in the mount effect misses the case where the panel was already open when
