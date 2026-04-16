@@ -97,29 +97,46 @@ class ErrorBoundary extends Component<
   }
 }
 
+// The single component that owns all panel state. It's intentionally flat:
+// every section reads from shared state and state setters are passed down to
+// leaf components. Organized top-to-bottom as:
+//   1. State and refs
+//   2. Stable callbacks (setBusy, runUpdateCheck, refreshStatus, poll helpers)
+//   3. Lifecycle effects (main refresh, init, connectivity retry, update timeout,
+//      update heartbeat)
+//   4. User action handlers (toggles, optimize, reset, backend switch, updates)
+//   5. Derived render state (connected, supported, allSafeActive, etc.)
+//   6. JSX for the panel sections in top-to-bottom screen order
 function Content() {
+  // --- General status and toggle state ---
   const [status, setStatus] = useState<PluginStatus | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isBusy, setIsBusy] = useState(false);
   const [applyingAll, setApplyingAll] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<OptimizeSafeResult | null>(null);
   const [customDnsInput, setCustomDnsInput] = useState("");
+
+  // --- Update flow state ---
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // --- Backend switch state ---
   const [backendSwitch, setBackendSwitch] = useState<BackendSwitchStatus | null>(null);
-  // State mirror of busyRef so toggles can visually disable during in-flight
-  // operations. Ref is used for the sync early-return guard; state drives UI.
-  const [isBusy, setIsBusy] = useState(false);
-  const backendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // --- Refs ---
+  // busyRef is the synchronous re-entrancy guard; isBusy (above) is the React
+  // state mirror so UI can respond. setBusy below writes both together.
   const busyRef = useRef(false);
+  const backendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevConnectedRef = useRef<boolean | null>(null);
+  const lastUpdateCheckAtRef = useRef<number>(0);
 
   const setBusy = useCallback((val: boolean) => {
     busyRef.current = val;
     setIsBusy(val);
   }, []);
-  const prevConnectedRef = useRef<boolean | null>(null);
-  const lastUpdateCheckAtRef = useRef<number>(0);
 
   // Runs checkForUpdate with dedupe - skips if a check was issued within the
   // dedupe window. Lowers GitHub API pressure in CGNAT/dorm scenarios where
@@ -244,10 +261,10 @@ function Content() {
     };
   }, [beginBackendPoll, runUpdateCheck, setBusy]);
 
-  // Retry update check when connectivity recovers - the initial one-shot check
+  // Retry update check when connectivity recovers. The initial one-shot check
   // in the mount effect misses the case where the panel was already open when
   // the network came back. Skip until status has loaded to avoid a spurious
-  // null→true "transition" firing an extra check on every mount.
+  // null-to-true transition firing an extra check on every mount.
   useEffect(() => {
     if (!status) return;
     const connected = status.connected;

@@ -482,28 +482,42 @@ class ErrorBoundary extends SP_REACT.Component {
         return this.props.children;
     }
 }
+// The single component that owns all panel state. It's intentionally flat:
+// every section reads from shared state and state setters are passed down to
+// leaf components. Organized top-to-bottom as:
+//   1. State and refs
+//   2. Stable callbacks (setBusy, runUpdateCheck, refreshStatus, poll helpers)
+//   3. Lifecycle effects (main refresh, init, connectivity retry, update timeout,
+//      update heartbeat)
+//   4. User action handlers (toggles, optimize, reset, backend switch, updates)
+//   5. Derived render state (connected, supported, allSafeActive, etc.)
+//   6. JSX for the panel sections in top-to-bottom screen order
 function Content() {
+    // --- General status and toggle state ---
     const [status, setStatus] = SP_REACT.useState(null);
     const [errors, setErrors] = SP_REACT.useState({});
+    const [isBusy, setIsBusy] = SP_REACT.useState(false);
     const [applyingAll, setApplyingAll] = SP_REACT.useState(false);
     const [optimizeResult, setOptimizeResult] = SP_REACT.useState(null);
     const [customDnsInput, setCustomDnsInput] = SP_REACT.useState("");
+    // --- Update flow state ---
     const [updateInfo, setUpdateInfo] = SP_REACT.useState(null);
     const [checkingUpdate, setCheckingUpdate] = SP_REACT.useState(false);
     const [updating, setUpdating] = SP_REACT.useState(false);
     const [updateError, setUpdateError] = SP_REACT.useState(null);
+    // --- Backend switch state ---
     const [backendSwitch, setBackendSwitch] = SP_REACT.useState(null);
-    // State mirror of busyRef so toggles can visually disable during in-flight
-    // operations. Ref is used for the sync early-return guard; state drives UI.
-    const [isBusy, setIsBusy] = SP_REACT.useState(false);
-    const backendPollRef = SP_REACT.useRef(null);
+    // --- Refs ---
+    // busyRef is the synchronous re-entrancy guard; isBusy (above) is the React
+    // state mirror so UI can respond. setBusy below writes both together.
     const busyRef = SP_REACT.useRef(false);
+    const backendPollRef = SP_REACT.useRef(null);
+    const prevConnectedRef = SP_REACT.useRef(null);
+    const lastUpdateCheckAtRef = SP_REACT.useRef(0);
     const setBusy = SP_REACT.useCallback((val) => {
         busyRef.current = val;
         setIsBusy(val);
     }, []);
-    const prevConnectedRef = SP_REACT.useRef(null);
-    const lastUpdateCheckAtRef = SP_REACT.useRef(0);
     // Runs checkForUpdate with dedupe - skips if a check was issued within the
     // dedupe window. Lowers GitHub API pressure in CGNAT/dorm scenarios where
     // many Decks share an IP. Manual button bypasses this (force=true).
@@ -628,10 +642,10 @@ function Content() {
                 clearInterval(backendPollRef.current);
         };
     }, [beginBackendPoll, runUpdateCheck, setBusy]);
-    // Retry update check when connectivity recovers - the initial one-shot check
+    // Retry update check when connectivity recovers. The initial one-shot check
     // in the mount effect misses the case where the panel was already open when
     // the network came back. Skip until status has loaded to avoid a spurious
-    // null→true "transition" firing an extra check on every mount.
+    // null-to-true transition firing an extra check on every mount.
     SP_REACT.useEffect(() => {
         if (!status)
             return;

@@ -1,3 +1,13 @@
+"""WiFi Optimizer backend for Decky Loader.
+
+Runs as root inside the plugin_loader process. All public async methods on
+the Plugin class are callable from the React frontend via Decky's IPC. State
+is persisted to settings.json under DECKY_PLUGIN_SETTINGS_DIR and shared with
+the NetworkManager dispatcher script at defaults/dispatcher.sh.tmpl, which
+reapplies volatile optimizations (power save, PCIe ASPM, buffer tuning) on
+every WiFi reconnect independently of Decky.
+"""
+
 import os
 import json
 import time
@@ -7,7 +17,9 @@ import subprocess
 try:
     import decky
 except ImportError:
-    # Fallback if decky module is unavailable (shouldn't happen in normal operation)
+    # Local fallback when decky isn't importable (e.g., running outside
+    # plugin_loader for static analysis or ad-hoc testing). All runtime
+    # paths on a Deck have the real module.
     class decky:  # type: ignore
         DECKY_PLUGIN_SETTINGS_DIR = "/tmp/wifi-optimizer"
         DECKY_PLUGIN_DIR = "/tmp/wifi-optimizer"
@@ -45,6 +57,12 @@ DNS_PROVIDERS = {
     "quad9": "9.9.9.9 149.112.112.112",
 }
 
+# Tuned values for game streaming: larger socket buffers absorb bursty UDP
+# traffic, higher netdev backlog/budget lets the kernel process more packets
+# per NAPI cycle, and disabling tcp_slow_start_after_idle keeps TCP congestion
+# window from resetting after idle pauses (matters for control-plane TCP).
+# Values match commonly cited streaming presets rather than being
+# exhaustively tuned.
 SYSCTL_PARAMS = {
     "net.core.rmem_max": "16777216",
     "net.core.wmem_max": "16777216",
@@ -56,6 +74,7 @@ SYSCTL_PARAMS = {
     "net.ipv4.tcp_slow_start_after_idle": "0",
 }
 
+# Kernel defaults, restored when buffer tuning is disabled.
 SYSCTL_DEFAULTS = {
     "net.core.rmem_max": "212992",
     "net.core.wmem_max": "212992",
@@ -116,13 +135,23 @@ def _save_settings_with_timestamp(data: dict):
 
 
 class Plugin:
+    """Root plugin instance. Decky exposes every async method here as a
+    callable from the frontend. Synchronous helpers prefixed with `_` are
+    for internal use only."""
+
     # ---- Helpers ----
 
     def _run_cmd(self, cmd: list[str], timeout: int = 5, clean_env: bool = False) -> dict:
+        """Run a subprocess and return a result dict.
+
+        clean_env strips LD_LIBRARY_PATH so children use system libraries
+        instead of Decky's PyInstaller-bundled ones. Required for curl
+        (OpenSSL mismatch) and bash (readline symbol mismatch); without it,
+        those binaries fail with cryptic symbol-lookup errors.
+        """
         try:
             env = None
             if clean_env:
-                # Use system libraries, not Decky's bundled ones
                 env = {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=timeout, env=env
@@ -1458,7 +1487,10 @@ systemctl restart plugin_loader 2>/dev/null || true
                 if iface_check != "wlan0":
                     needs_reboot = True
 
-            # Phase: reconnecting - wait for NM to reconnect to WiFi
+            # Phase: reconnecting. Poll nmcli at 1-second cadence for up to 15s
+            # to confirm WiFi actually comes back. 15s is generous for typical
+            # NM reconnect (about 5s on wpa_supplicant, 1-2s on iwd) but not
+            # so long that users with dead networks wait forever.
             reconnect_timed_out = False
             if not needs_reboot:
                 self._backend_switch["phase"] = "reconnecting"
