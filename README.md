@@ -79,7 +79,7 @@ No background processes, no polling, no battery impact.
 
 ## Uninstall
 
-**Before uninstalling:** tap **Reset Settings** in the plugin's Actions section. This reverts the runtime optimizations (power save, buffer tuning, PCIe ASPM) and deletes the plugin's own config files. Per-connection NetworkManager profile changes (BSSID lock, band preference, custom DNS, IPv6) stay on your saved WiFi network — to remove those, forget and rejoin the network from Steam's WiFi settings. The WiFi backend choice (iwd vs wpa_supplicant) is a system-wide SteamOS setting and isn't touched by the plugin on uninstall.
+**Before uninstalling:** tap **Reset Settings** in the plugin's Actions section. This reverts the runtime optimizations (power save, buffer tuning, PCIe ASPM) and deletes the plugin's own config files. Per-connection NetworkManager profile changes (BSSID lock, band preference, custom DNS, IPv6) stay on your saved WiFi network - to remove those, forget and rejoin the network from Steam's WiFi settings. The WiFi backend choice (iwd vs wpa_supplicant) is a system-wide SteamOS setting and isn't touched by the plugin on uninstall.
 
 Then uninstall from Decky's plugin manager (Decky settings > WiFi Optimizer > Uninstall), or manually:
 

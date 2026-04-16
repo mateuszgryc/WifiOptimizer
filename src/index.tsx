@@ -529,7 +529,7 @@ function Content() {
         const isWarning = !r.success || r.needs_reboot || r.reconnect_timed_out;
         let text: string;
         if (r.needs_reboot) {
-          text = `Backend switched to ${r.target}, but wlan0 didn't come back — reboot required`;
+          text = `Backend switched to ${r.target}, but wlan0 didn't come back - reboot required`;
         } else if (!r.success) {
           text = r.message ?? "Backend switch failed";
         } else {
@@ -800,9 +800,9 @@ function Content() {
               subtitle={
                 phaseText
                   ? phaseText
-                  : "Alternate WiFi backend — can fix OLED sleep/wake issues"
+                  : "Alternate WiFi backend - can fix OLED sleep/wake issues"
               }
-              explanation="SteamOS 3.6+ defaults to iwd for WiFi. Some OLED owners see disconnects after sleep, 5 GHz dropouts, or 'invalid password' errors with iwd. Switching to wpa_supplicant trades slightly slower reconnect (about 5s vs 1-2s) for broader compatibility and better stability on certain routers. The setting survives reboots and SteamOS updates. On OLED, switching to wpa_supplicant may briefly destroy the wlan0 interface — the plugin automatically recreates it, but a reboot is needed as a last resort. Note: some networks (WPA3-only, certain enterprise setups) behave differently between backends — if your WiFi stops connecting after a switch, try switching back."
+              explanation="SteamOS 3.6+ defaults to iwd for WiFi. Some OLED owners see disconnects after sleep, 5 GHz dropouts, or 'invalid password' errors with iwd. Switching to wpa_supplicant trades slightly slower reconnect (about 5s vs 1-2s) for broader compatibility and better stability on certain routers. The setting survives reboots and SteamOS updates. On OLED, switching to wpa_supplicant may briefly destroy the wlan0 interface - the plugin automatically recreates it, but a reboot is needed as a last resort. Note: some networks (WPA3-only, certain enterprise setups) behave differently between backends - if your WiFi stops connecting after a switch, try switching back."
               badge={backendBadge.badge}
               text={backendBadge.text}
               checked={checkedVal}
