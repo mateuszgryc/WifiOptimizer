@@ -470,6 +470,28 @@ class Plugin:
         settings = _load_settings()
         return settings.get("model") in ("lcd", "oled")
 
+    def _unsupported_response(self) -> dict:
+        """Standard error dict returned by every setter when running on a
+        non-Steam-Deck device."""
+        return {
+            "success": False,
+            "error": "unexpected",
+            "message": "Unsupported device. This plugin is designed for Steam Deck only.",
+        }
+
+    def _unexpected_response(self, e: Exception) -> dict:
+        """Standard error dict for the catch-all exception handler in every
+        setter. Callers log the error separately with the setter name."""
+        return {"success": False, "error": "unexpected", "message": str(e)}
+
+    def _nmcli_modify(self, uuid: str, key: str, value: str, timeout: int = 5) -> dict:
+        """Run `nmcli con mod uuid <uuid> <key> <value>`. Returns the
+        _run_cmd dict so callers can handle success/failure themselves."""
+        return self._run_cmd(
+            ["/usr/bin/nmcli", "con", "mod", "uuid", uuid, key, value],
+            timeout=timeout,
+        )
+
     # ---- Status ----
 
     async def get_status(self) -> dict:
@@ -514,10 +536,9 @@ class Plugin:
                 _save_settings(settings)
 
             if uuid and not settings.get("priority_set"):
-                self._run_cmd(
-                    ["/usr/bin/nmcli", "con", "mod", "uuid", uuid,
-                     "connection.autoconnect-priority", "100"],
-                    timeout=T,
+                # Bump priority to favor this profile over duplicates on boot.
+                self._nmcli_modify(
+                    uuid, "connection.autoconnect-priority", "100", timeout=T
                 )
                 settings["priority_set"] = True
                 _save_settings(settings)
@@ -680,14 +701,14 @@ class Plugin:
             return status
         except Exception as e:
             decky.logger.error(f"get_status error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     # ---- Optimization setters ----
 
     async def set_power_save(self, disabled: bool) -> dict:
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             iface = self._get_wifi_interface()
 
             # Apply immediately if connected - verify before saving
@@ -728,12 +749,12 @@ class Plugin:
             return {"success": True, "power_save_off": disabled}
         except Exception as e:
             decky.logger.error(f"set_power_save error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def set_auto_fix(self, enabled: bool) -> dict:
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             settings = _load_settings()
             settings["auto_fix_on_wake"] = enabled
 
@@ -754,7 +775,7 @@ class Plugin:
     async def set_bssid_lock(self, enabled: bool) -> dict:
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             if enabled:
                 # Enabling requires active WiFi to read current BSSID
                 iface, uuid, err = self._require_wifi()
@@ -778,17 +799,7 @@ class Plugin:
                         "message": "Could not determine current BSSID",
                     }
 
-                result = self._run_cmd(
-                    [
-                        "/usr/bin/nmcli",
-                        "con",
-                        "mod",
-                        "uuid",
-                        uuid,
-                        "802-11-wireless.bssid",
-                        bssid,
-                    ]
-                )
+                result = self._nmcli_modify(uuid, "802-11-wireless.bssid", bssid)
                 if not result["success"]:
                     return {
                         "success": False,
@@ -815,17 +826,7 @@ class Plugin:
                         "message": "No connection UUID found. Connect to WiFi first.",
                     }
 
-                result = self._run_cmd(
-                    [
-                        "/usr/bin/nmcli",
-                        "con",
-                        "mod",
-                        "uuid",
-                        uuid,
-                        "802-11-wireless.bssid",
-                        "",
-                    ]
-                )
+                result = self._nmcli_modify(uuid, "802-11-wireless.bssid", "")
                 if not result["success"]:
                     return {
                         "success": False,
@@ -844,12 +845,12 @@ class Plugin:
             return {"success": True, "bssid_locked": enabled, "reconnected": True}
         except Exception as e:
             decky.logger.error(f"set_bssid_lock error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def set_band_preference(self, enabled: bool, band: str = "a") -> dict:
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             if enabled and band not in ("a", "bg"):
                 return {
                     "success": False,
@@ -874,17 +875,7 @@ class Plugin:
                 }
 
             value = band if enabled else ""
-            result = self._run_cmd(
-                [
-                    "/usr/bin/nmcli",
-                    "con",
-                    "mod",
-                    "uuid",
-                    uuid,
-                    "802-11-wireless.band",
-                    value,
-                ]
-            )
+            result = self._nmcli_modify(uuid, "802-11-wireless.band", value)
             if not result["success"]:
                 return {
                     "success": False,
@@ -902,14 +893,14 @@ class Plugin:
             return {"success": True, "band": value, "reconnected": True}
         except Exception as e:
             decky.logger.error(f"set_band_preference error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def set_dns(
         self, enabled: bool, provider: str = "cloudflare", custom_servers: str = ""
     ) -> dict:
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             iface, uuid, _ = self._require_wifi()
             if enabled and not uuid:
                 return {
@@ -944,17 +935,7 @@ class Plugin:
                         "message": f"Unknown DNS provider '{provider}'",
                     }
 
-                result = self._run_cmd(
-                    [
-                        "/usr/bin/nmcli",
-                        "con",
-                        "mod",
-                        "uuid",
-                        uuid,
-                        "ipv4.dns",
-                        servers,
-                    ]
-                )
+                result = self._nmcli_modify(uuid, "ipv4.dns", servers)
                 if not result["success"]:
                     return {
                         "success": False,
@@ -963,17 +944,7 @@ class Plugin:
                         "detail": result["stderr"],
                     }
 
-                result2 = self._run_cmd(
-                    [
-                        "/usr/bin/nmcli",
-                        "con",
-                        "mod",
-                        "uuid",
-                        uuid,
-                        "ipv4.ignore-auto-dns",
-                        "yes",
-                    ]
-                )
+                result2 = self._nmcli_modify(uuid, "ipv4.ignore-auto-dns", "yes")
                 if not result2["success"]:
                     return {
                         "success": False,
@@ -982,28 +953,8 @@ class Plugin:
                         "detail": result2["stderr"],
                     }
             else:
-                self._run_cmd(
-                    [
-                        "/usr/bin/nmcli",
-                        "con",
-                        "mod",
-                        "uuid",
-                        uuid,
-                        "ipv4.dns",
-                        "",
-                    ]
-                )
-                self._run_cmd(
-                    [
-                        "/usr/bin/nmcli",
-                        "con",
-                        "mod",
-                        "uuid",
-                        uuid,
-                        "ipv4.ignore-auto-dns",
-                        "no",
-                    ]
-                )
+                self._nmcli_modify(uuid, "ipv4.dns", "")
+                self._nmcli_modify(uuid, "ipv4.ignore-auto-dns", "no")
                 servers = ""
 
             settings = _load_settings()
@@ -1016,12 +967,12 @@ class Plugin:
             return {"success": True, "dns_set": enabled, "reconnected": True}
         except Exception as e:
             decky.logger.error(f"set_dns error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def set_ipv6(self, disabled: bool) -> dict:
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             iface, uuid, _ = self._require_wifi()
             if disabled and not uuid:
                 return {
@@ -1039,17 +990,7 @@ class Plugin:
                 }
 
             method = "disabled" if disabled else "auto"
-            result = self._run_cmd(
-                [
-                    "/usr/bin/nmcli",
-                    "con",
-                    "mod",
-                    "uuid",
-                    uuid,
-                    "ipv6.method",
-                    method,
-                ]
-            )
+            result = self._nmcli_modify(uuid, "ipv6.method", method)
             if not result["success"]:
                 return {
                     "success": False,
@@ -1066,12 +1007,12 @@ class Plugin:
             return {"success": True, "ipv6_disabled": disabled, "reconnected": True}
         except Exception as e:
             decky.logger.error(f"set_ipv6 error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def set_buffer_tuning(self, enabled: bool) -> dict:
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             params = SYSCTL_PARAMS if enabled else SYSCTL_DEFAULTS
             for key, value in params.items():
                 result = self._run_cmd(
@@ -1094,13 +1035,13 @@ class Plugin:
             return {"success": True, "buffer_tuning": enabled}
         except Exception as e:
             decky.logger.error(f"set_buffer_tuning error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def optimize_safe(self) -> dict:
         """Apply universally-safe optimizations: power save, BSSID lock, auto-fix, buffer tuning."""
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             results = {}
             applied = 0
             total = 4
@@ -1142,13 +1083,13 @@ class Plugin:
             }
         except Exception as e:
             decky.logger.error(f"optimize_safe error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def reapply_all(self) -> dict:
         """Force reapply all enabled optimizations."""
         try:
             if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
+                return self._unsupported_response()
             settings = _load_settings()
             results = {}
             applied = 0
@@ -1237,7 +1178,7 @@ class Plugin:
             return result
         except Exception as e:
             decky.logger.error(f"reapply_all error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def reset_settings(self) -> dict:
         """Delete settings and revert to defaults."""
@@ -1275,7 +1216,7 @@ class Plugin:
             return {"success": True, "message": "Settings reset to defaults"}
         except Exception as e:
             decky.logger.error(f"reset_settings error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     # ---- Updates ----
 
@@ -1291,7 +1232,7 @@ class Plugin:
             return {"success": True, "channel": channel}
         except Exception as e:
             decky.logger.error(f"set_update_channel error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     async def check_for_update(self) -> dict:
         """Check GitHub for a newer version (stable release or beta branch)."""
@@ -1456,7 +1397,7 @@ systemctl restart plugin_loader 2>/dev/null || true
             return {"success": True, "message": f"Updating to {label}..."}
         except Exception as e:
             decky.logger.error(f"apply_update error: {e}")
-            return {"success": False, "error": "unexpected", "message": str(e)}
+            return self._unexpected_response(e)
 
     # ---- WiFi backend switch (iwd / wpa_supplicant) ----
 

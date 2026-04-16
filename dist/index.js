@@ -313,19 +313,86 @@ function Banner({ variant, icon, children }) {
                 }, children: [icon !== undefined && (SP_JSX.jsx("span", { style: { fontSize: theme.fontSize.icon }, children: icon })), SP_JSX.jsx("span", { children: children })] }) }) }));
 }
 
-const REFRESH_INTERVAL = 3000;
-const RECONNECT_DELAY = 4000;
-const BACKEND_POLL_INTERVAL = 750;
-const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
-const UPDATE_CHECK_DEDUPE_MS = 60 * 1000;
-const UPDATE_TIMEOUT_MS = 60 * 1000;
-const BACKEND_PHASE_TEXT = {
+const PHASE_TEXT = {
     idle: "",
     switching: "Switching backend…",
     reconnecting: "Reconnecting…",
     done: "",
     failed: "",
 };
+const EXPLANATION = "SteamOS 3.6+ defaults to iwd for WiFi. Some OLED owners see disconnects " +
+    "after sleep, 5 GHz dropouts, or 'invalid password' errors with iwd. " +
+    "Switching to wpa_supplicant trades slightly slower reconnect (about 5s " +
+    "vs 1-2s) for broader compatibility and better stability on certain " +
+    "routers. The setting survives reboots and SteamOS updates. On OLED, " +
+    "switching to wpa_supplicant may briefly destroy the wlan0 interface - " +
+    "the plugin automatically recreates it, but a reboot is needed as a last " +
+    "resort. Note: some networks (WPA3-only, certain enterprise setups) " +
+    "behave differently between backends - if your WiFi stops connecting " +
+    "after a switch, try switching back.";
+function BackendToggleRow({ status, backendSwitch, error, isBusy, onToggle, }) {
+    const currentBackend = status.live?.wifi_backend || "iwd";
+    const isWpa = currentBackend === "wpa_supplicant";
+    const switching = backendSwitch?.in_progress ?? false;
+    // Optimistic: during a switch, reflect the target so the toggle matches
+    // the user's click until the operation completes. On failure, it snaps
+    // back to the actual backend.
+    const checked = switching && backendSwitch?.target
+        ? backendSwitch.target === "wpa_supplicant"
+        : isWpa;
+    const phaseText = switching
+        ? PHASE_TEXT[backendSwitch.phase] || "Working…"
+        : null;
+    const badge = error
+        ? { badge: "error", text: "failed" }
+        : switching
+            ? { badge: "unknown", text: "…" }
+            : isWpa
+                ? { badge: "active", text: "wpa_supplicant" }
+                : { badge: "off", text: "iwd" };
+    // Inline result shown right under the toggle so it's visible where the
+    // user clicked - the top-of-panel banner is often off-screen when the
+    // user is scrolled down to the Advanced section.
+    const lastResult = !switching && !error && backendSwitch?.result && !backendSwitch.result.needs_reboot
+        ? backendSwitch.result
+        : null;
+    return (SP_JSX.jsx(InfoRow, { label: "Use wpa_supplicant backend", subtitle: phaseText ?? "Alternate WiFi backend - can fix OLED sleep/wake issues", explanation: EXPLANATION, badge: badge.badge, text: badge.text, checked: checked, disabled: switching || isBusy, error: error, onChange: onToggle, children: lastResult?.success && (() => {
+            const timedOut = lastResult.reconnect_timed_out;
+            const parts = [`Switched to ${lastResult.backend}`];
+            if (lastResult.recovery_performed)
+                parts.push("wlan0 interface recreated");
+            if (timedOut)
+                parts.push("WiFi didn't reconnect");
+            return (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: {
+                        fontSize: theme.fontSize.small,
+                        color: timedOut ? theme.warning.text : theme.success.text,
+                        padding: "2px 0",
+                    }, children: [timedOut ? "⚠" : "✓", " ", parts.join(" · ")] }) }));
+        })() }));
+}
+
+const CHANNEL_OPTIONS = [
+    { data: "stable", label: "Stable" },
+    { data: "beta", label: "Beta" },
+];
+// The Updates panel section: channel selector, optional warning text for a
+// stuck / failed update, and a button that context-switches between
+// "Updating...", "Update Now", "Up to date", and "Check for Updates"
+// depending on state.
+function UpdatesSection({ channel, updating, checkingUpdate, updateInfo, updateError, onChannelChange, onApply, onCheck, }) {
+    return (SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Update channel", rgOptions: CHANNEL_OPTIONS, selectedOption: channel, onChange: (option) => onChannelChange(option.data) }) }), updateError && !updating && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.body, color: theme.warning.text }, children: ["\u26A0 ", updateError] }) })), updating ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.body, color: theme.info.text }, children: "Updating... plugin will restart momentarily." }) })) : updateInfo?.update_available ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.body, color: theme.success.text }, children: ["v", updateInfo.latest_version, " available (you have v", updateInfo.current_version, ")"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: onApply, children: "Update Now" }) })] })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [updateInfo && updateInfo.success === false && updateInfo.message && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.tiny, color: theme.error.text }, children: updateInfo.message }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate, onClick: onCheck, children: checkingUpdate
+                                ? "Checking..."
+                                : updateInfo?.success && !updateInfo?.update_available
+                                    ? "Up to date"
+                                    : "Check for Updates" }) })] }))] }));
+}
+
+const REFRESH_INTERVAL = 3000;
+const RECONNECT_DELAY = 4000;
+const BACKEND_POLL_INTERVAL = 750;
+const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
+const UPDATE_CHECK_DEDUPE_MS = 60 * 1000;
+const UPDATE_TIMEOUT_MS = 60 * 1000;
 function timeAgo(ts) {
     if (!ts)
         return "never";
@@ -585,6 +652,34 @@ function Content() {
             stop();
         };
     }, [runUpdateCheck]);
+    const handleApplyUpdate = async () => {
+        setUpdateError(null);
+        setUpdating(true);
+        try {
+            await applyUpdate();
+        }
+        catch {
+            // plugin_loader restart killed the connection; expected
+        }
+    };
+    const handleCheckForUpdate = async () => {
+        setCheckingUpdate(true);
+        setUpdateError(null);
+        lastUpdateCheckAtRef.current = Date.now();
+        try {
+            const result = await checkForUpdate();
+            setUpdateInfo(result);
+        }
+        catch {
+            // refreshStatus has its own catch; no need to log here
+        }
+        setCheckingUpdate(false);
+    };
+    const handleChannelChange = async (nextChannel) => {
+        await setUpdateChannel(nextChannel);
+        setUpdateInfo(null);
+        await refreshStatus();
+    };
     const handleBackendToggle = async (on) => {
         // Re-entrancy guard: drop rapid clicks or clicks that land while another
         // operation is already running. Protects against duplicate backend calls
@@ -724,14 +819,7 @@ function Content() {
                                 padding: "2px 8px",
                                 borderRadius: theme.radius.pill,
                                 color: theme.text.tertiary,
-                            }, children: ["Device: ", modelLabel] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.muted }, children: ["Version: ", status?.version ?? "?"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.muted }, children: "Tap (i) on any toggle for details" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.muted }, children: ["Last changed: ", timeAgo(s?.last_applied ?? 0), status?.live?.last_enforced ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx("br", {}), "Auto-applied: ", timeAgo(status.live.last_enforced)] })) : ""] }) })] }), !supported && (SP_JSX.jsx(Banner, { variant: "error", children: "This plugin is designed for Steam Deck only. Unsupported device detected." })), updateInfo?.update_available && !updating && (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", onClick: async () => {
-                            setUpdateError(null);
-                            setUpdating(true);
-                            try {
-                                await applyUpdate();
-                            }
-                            catch { /* restart killed connection */ }
-                        }, children: ["Update to v", updateInfo.latest_version] }) }) })), updating && (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.body, color: theme.info.text }, children: "Updating... plugin will restart momentarily." }) }) })), connected && !s?.last_applied && (SP_JSX.jsxs(Banner, { variant: "info", children: ["Tap ", SP_JSX.jsx("strong", { children: "Optimize Safe" }), " to get started."] })), connected && !!s?.last_applied && driftCount > 0 && (SP_JSX.jsxs(Banner, { variant: "warning", icon: "\u26A0", children: [driftCount, " setting", driftCount > 1 ? "s" : "", " drifted after wake.", " ", SP_JSX.jsx("span", { style: { textDecoration: "underline", cursor: "pointer" }, onClick: handleOptimize, children: "Fix now" })] })), !connected && (SP_JSX.jsx(Banner, { variant: "error", icon: "\u2715", children: "Not connected to WiFi. Connect first, then optimize." })), backendSwitch && !backendSwitch.in_progress && backendSwitch.result && (() => {
+                            }, children: ["Device: ", modelLabel] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.muted }, children: ["Version: ", status?.version ?? "?"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.muted }, children: "Tap (i) on any toggle for details" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.muted }, children: ["Last changed: ", timeAgo(s?.last_applied ?? 0), status?.live?.last_enforced ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx("br", {}), "Auto-applied: ", timeAgo(status.live.last_enforced)] })) : ""] }) })] }), !supported && (SP_JSX.jsx(Banner, { variant: "error", children: "This plugin is designed for Steam Deck only. Unsupported device detected." })), updateInfo?.update_available && !updating && (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", onClick: handleApplyUpdate, children: ["Update to v", updateInfo.latest_version] }) }) })), updating && (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.body, color: theme.info.text }, children: "Updating... plugin will restart momentarily." }) }) })), connected && !s?.last_applied && (SP_JSX.jsxs(Banner, { variant: "info", children: ["Tap ", SP_JSX.jsx("strong", { children: "Optimize Safe" }), " to get started."] })), connected && !!s?.last_applied && driftCount > 0 && (SP_JSX.jsxs(Banner, { variant: "warning", icon: "\u26A0", children: [driftCount, " setting", driftCount > 1 ? "s" : "", " drifted after wake.", " ", SP_JSX.jsx("span", { style: { textDecoration: "underline", cursor: "pointer" }, onClick: handleOptimize, children: "Fix now" })] })), !connected && (SP_JSX.jsx(Banner, { variant: "error", icon: "\u2715", children: "Not connected to WiFi. Connect first, then optimize." })), backendSwitch && !backendSwitch.in_progress && backendSwitch.result && (() => {
                 const r = backendSwitch.result;
                 // Treat reconnect timeout as a warning even when the backend-level
                 // switch succeeded - the system is switched but WiFi didn't come back.
@@ -765,51 +853,7 @@ function Content() {
                                             if (customDnsInput) {
                                                 handleToggle("dns", () => setDns(true, "custom", customDnsInput));
                                             }
-                                        } }) }))] })) }), SP_JSX.jsx(InfoRow, { label: "Disable IPv6", subtitle: "Use IPv4 only on this network", explanation: "Some networks have poor or misconfigured IPv6 support, which can cause slow DNS resolution, connection timeouts, or routing issues. Disabling IPv6 forces all traffic through IPv4. Only enable this if you're experiencing issues - most modern networks handle IPv6 fine.", ...getBadge(undefined, status, errors.ipv6 ?? null), checked: s?.ipv6_disabled ?? false, disabled: isBusy || (!connected && !s?.ipv6_disabled), error: errors.ipv6, onChange: (val) => handleToggle("ipv6", () => setIpv6(val)) }), supported && status?.live?.backend_tool_available && (() => {
-                        const currentBackend = status?.live?.wifi_backend || "iwd";
-                        const isWpa = currentBackend === "wpa_supplicant";
-                        const switching = backendSwitch?.in_progress ?? false;
-                        // Optimistic: during a switch, reflect the target so the toggle matches
-                        // the user's click until the operation completes. On failure, it snaps
-                        // back to the actual backend.
-                        const checkedVal = switching && backendSwitch?.target
-                            ? backendSwitch.target === "wpa_supplicant"
-                            : isWpa;
-                        const phaseText = switching
-                            ? BACKEND_PHASE_TEXT[backendSwitch.phase] || "Working…"
-                            : null;
-                        const backendBadge = errors.wifi_backend
-                            ? { badge: "error", text: "failed" }
-                            : switching
-                                ? { badge: "unknown", text: "…" }
-                                : isWpa
-                                    ? { badge: "active", text: "wpa_supplicant" }
-                                    : { badge: "off", text: "iwd" };
-                        // Inline result shown right under the toggle so it's visible where the
-                        // user clicked - the top-of-panel banner is often off-screen when the
-                        // user is scrolled down to the Advanced section.
-                        const lastResult = !switching &&
-                            !errors.wifi_backend &&
-                            backendSwitch?.result &&
-                            !backendSwitch.result.needs_reboot
-                            ? backendSwitch.result
-                            : null;
-                        return (SP_JSX.jsx(InfoRow, { label: "Use wpa_supplicant backend", subtitle: phaseText
-                                ? phaseText
-                                : "Alternate WiFi backend - can fix OLED sleep/wake issues", explanation: "SteamOS 3.6+ defaults to iwd for WiFi. Some OLED owners see disconnects after sleep, 5 GHz dropouts, or 'invalid password' errors with iwd. Switching to wpa_supplicant trades slightly slower reconnect (about 5s vs 1-2s) for broader compatibility and better stability on certain routers. The setting survives reboots and SteamOS updates. On OLED, switching to wpa_supplicant may briefly destroy the wlan0 interface - the plugin automatically recreates it, but a reboot is needed as a last resort. Note: some networks (WPA3-only, certain enterprise setups) behave differently between backends - if your WiFi stops connecting after a switch, try switching back.", badge: backendBadge.badge, text: backendBadge.text, checked: checkedVal, disabled: switching || isBusy, error: errors.wifi_backend, onChange: handleBackendToggle, children: lastResult?.success && (() => {
-                                const timedOut = lastResult.reconnect_timed_out;
-                                const parts = [`Switched to ${lastResult.backend}`];
-                                if (lastResult.recovery_performed)
-                                    parts.push("wlan0 interface recreated");
-                                if (timedOut)
-                                    parts.push("WiFi didn't reconnect");
-                                return (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: {
-                                            fontSize: theme.fontSize.small,
-                                            color: timedOut ? theme.warning.text : theme.success.text,
-                                            padding: "2px 0",
-                                        }, children: [timedOut ? "⚠" : "✓", " ", parts.join(" · ")] }) }));
-                            })() }));
-                    })()] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Live status", children: [connected && status?.live?.ip_address && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.tertiary }, children: ["IP: ", status.live.ip_address] }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(StatsGrid, { live: status?.live ?? {}, connected: connected }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Actions", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: !connected || !supported || isBusy, onClick: () => handleToggle("reapply", () => reapplyAll()), children: "Force Reapply All" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: isBusy, onClick: async () => {
+                                        } }) }))] })) }), SP_JSX.jsx(InfoRow, { label: "Disable IPv6", subtitle: "Use IPv4 only on this network", explanation: "Some networks have poor or misconfigured IPv6 support, which can cause slow DNS resolution, connection timeouts, or routing issues. Disabling IPv6 forces all traffic through IPv4. Only enable this if you're experiencing issues - most modern networks handle IPv6 fine.", ...getBadge(undefined, status, errors.ipv6 ?? null), checked: s?.ipv6_disabled ?? false, disabled: isBusy || (!connected && !s?.ipv6_disabled), error: errors.ipv6, onChange: (val) => handleToggle("ipv6", () => setIpv6(val)) }), supported && status?.live?.backend_tool_available && (SP_JSX.jsx(BackendToggleRow, { status: status, backendSwitch: backendSwitch, error: errors.wifi_backend, isBusy: isBusy, onToggle: handleBackendToggle }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Live status", children: [connected && status?.live?.ip_address && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.tertiary }, children: ["IP: ", status.live.ip_address] }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(StatsGrid, { live: status?.live ?? {}, connected: connected }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Actions", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: !connected || !supported || isBusy, onClick: () => handleToggle("reapply", () => reapplyAll()), children: "Force Reapply All" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: isBusy, onClick: async () => {
                                 if (busyRef.current)
                                     return;
                                 setBusy(true);
@@ -822,31 +866,7 @@ function Content() {
                                     await refreshStatus(true);
                                     setBusy(false);
                                 }
-                            }, children: "Reset Settings" }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Update channel", rgOptions: [
-                                { data: "stable", label: "Stable" },
-                                { data: "beta", label: "Beta" },
-                            ], selectedOption: s?.update_channel ?? "stable", onChange: async (option) => {
-                                await setUpdateChannel(option.data);
-                                setUpdateInfo(null);
-                                await refreshStatus();
-                            } }) }), updateError && !updating && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.body, color: theme.warning.text }, children: ["\u26A0 ", updateError] }) })), updating ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.body, color: theme.info.text }, children: "Updating... plugin will restart momentarily." }) })) : updateInfo?.update_available ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.body, color: theme.success.text }, children: ["v", updateInfo.latest_version, " available (you have v", updateInfo.current_version, ")"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: async () => {
-                                        setUpdateError(null);
-                                        setUpdating(true);
-                                        try {
-                                            await applyUpdate();
-                                        }
-                                        catch { /* restart killed connection */ }
-                                    }, children: "Update Now" }) })] })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [updateInfo && updateInfo.success === false && updateInfo.message && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.tiny, color: theme.error.text }, children: updateInfo.message }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate, onClick: async () => {
-                                        setCheckingUpdate(true);
-                                        setUpdateError(null);
-                                        lastUpdateCheckAtRef.current = Date.now();
-                                        try {
-                                            const result = await checkForUpdate();
-                                            setUpdateInfo(result);
-                                        }
-                                        catch { /* ignore */ }
-                                        setCheckingUpdate(false);
-                                    }, children: checkingUpdate ? "Checking..." : (updateInfo?.success && !updateInfo?.update_available) ? "Up to date" : "Check for Updates" }) })] }))] }), SP_JSX.jsxs(DFL.PanelSection, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.dim }, children: ["v", status?.version ?? "?", " - by jasonridesabike"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.dim }, children: ["If WiFi won't reconnect, a reboot usually fixes it.", SP_JSX.jsx("br", {}), "Bugs? Report at github.com/ArcadaLabs-Jason/WifiOptimizer"] }) })] })] }));
+                            }, children: "Reset Settings" }) })] }), SP_JSX.jsx(UpdatesSection, { channel: s?.update_channel ?? "stable", updating: updating, checkingUpdate: checkingUpdate, updateInfo: updateInfo, updateError: updateError, onChannelChange: handleChannelChange, onApply: handleApplyUpdate, onCheck: handleCheckForUpdate }), SP_JSX.jsxs(DFL.PanelSection, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.dim }, children: ["v", status?.version ?? "?", " - by jasonridesabike"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.dim }, children: ["If WiFi won't reconnect, a reboot usually fixes it.", SP_JSX.jsx("br", {}), "Bugs? Report at github.com/ArcadaLabs-Jason/WifiOptimizer"] }) })] })] }));
 }
 var index = definePlugin(() => {
     return {

@@ -26,12 +26,13 @@ import type {
   UpdateCheckResult,
   BadgeStatus,
   BackendSwitchStatus,
-  BackendSwitchPhase,
 } from "./types";
 import { ERROR_MESSAGES } from "./types";
 import { InfoRow } from "./components/InfoRow";
 import { StatsGrid } from "./components/StatsGrid";
 import { Banner } from "./components/Banner";
+import { BackendToggleRow } from "./components/BackendToggleRow";
+import { UpdatesSection } from "./components/UpdatesSection";
 import { theme } from "./theme";
 
 const REFRESH_INTERVAL = 3000;
@@ -40,14 +41,6 @@ const BACKEND_POLL_INTERVAL = 750;
 const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
 const UPDATE_CHECK_DEDUPE_MS = 60 * 1000;
 const UPDATE_TIMEOUT_MS = 60 * 1000;
-
-const BACKEND_PHASE_TEXT: Record<BackendSwitchPhase, string> = {
-  idle: "",
-  switching: "Switching backend…",
-  reconnecting: "Reconnecting…",
-  done: "",
-  failed: "",
-};
 
 function timeAgo(ts: number): string {
   if (!ts) return "never";
@@ -320,6 +313,35 @@ function Content() {
     };
   }, [runUpdateCheck]);
 
+  const handleApplyUpdate = async () => {
+    setUpdateError(null);
+    setUpdating(true);
+    try {
+      await backend.applyUpdate();
+    } catch {
+      // plugin_loader restart killed the connection; expected
+    }
+  };
+
+  const handleCheckForUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateError(null);
+    lastUpdateCheckAtRef.current = Date.now();
+    try {
+      const result = await backend.checkForUpdate();
+      setUpdateInfo(result);
+    } catch {
+      // refreshStatus has its own catch; no need to log here
+    }
+    setCheckingUpdate(false);
+  };
+
+  const handleChannelChange = async (nextChannel: string) => {
+    await backend.setUpdateChannel(nextChannel);
+    setUpdateInfo(null);
+    await refreshStatus();
+  };
+
   const handleBackendToggle = async (on: boolean) => {
     // Re-entrancy guard: drop rapid clicks or clicks that land while another
     // operation is already running. Protects against duplicate backend calls
@@ -502,14 +524,7 @@ function Content() {
       {updateInfo?.update_available && !updating && (
         <PanelSection>
           <PanelSectionRow>
-            <ButtonItem
-              layout="below"
-              onClick={async () => {
-                setUpdateError(null);
-                setUpdating(true);
-                try { await backend.applyUpdate(); } catch { /* restart killed connection */ }
-              }}
-            >
+            <ButtonItem layout="below" onClick={handleApplyUpdate}>
               Update to v{updateInfo.latest_version}
             </ButtonItem>
           </PanelSectionRow>
@@ -742,75 +757,15 @@ function Content() {
             handleToggle("ipv6", () => backend.setIpv6(val))
           }
         />
-        {supported && status?.live?.backend_tool_available && (() => {
-          const currentBackend = status?.live?.wifi_backend || "iwd";
-          const isWpa = currentBackend === "wpa_supplicant";
-          const switching = backendSwitch?.in_progress ?? false;
-          // Optimistic: during a switch, reflect the target so the toggle matches
-          // the user's click until the operation completes. On failure, it snaps
-          // back to the actual backend.
-          const checkedVal = switching && backendSwitch?.target
-            ? backendSwitch.target === "wpa_supplicant"
-            : isWpa;
-          const phaseText = switching
-            ? BACKEND_PHASE_TEXT[backendSwitch!.phase] || "Working…"
-            : null;
-          const backendBadge: { badge: BadgeStatus; text: string } =
-            errors.wifi_backend
-              ? { badge: "error", text: "failed" }
-              : switching
-                ? { badge: "unknown", text: "…" }
-                : isWpa
-                  ? { badge: "active", text: "wpa_supplicant" }
-                  : { badge: "off", text: "iwd" };
-          // Inline result shown right under the toggle so it's visible where the
-          // user clicked - the top-of-panel banner is often off-screen when the
-          // user is scrolled down to the Advanced section.
-          const lastResult =
-            !switching &&
-            !errors.wifi_backend &&
-            backendSwitch?.result &&
-            !backendSwitch.result.needs_reboot
-              ? backendSwitch.result
-              : null;
-          return (
-            <InfoRow
-              label="Use wpa_supplicant backend"
-              subtitle={
-                phaseText
-                  ? phaseText
-                  : "Alternate WiFi backend - can fix OLED sleep/wake issues"
-              }
-              explanation="SteamOS 3.6+ defaults to iwd for WiFi. Some OLED owners see disconnects after sleep, 5 GHz dropouts, or 'invalid password' errors with iwd. Switching to wpa_supplicant trades slightly slower reconnect (about 5s vs 1-2s) for broader compatibility and better stability on certain routers. The setting survives reboots and SteamOS updates. On OLED, switching to wpa_supplicant may briefly destroy the wlan0 interface - the plugin automatically recreates it, but a reboot is needed as a last resort. Note: some networks (WPA3-only, certain enterprise setups) behave differently between backends - if your WiFi stops connecting after a switch, try switching back."
-              badge={backendBadge.badge}
-              text={backendBadge.text}
-              checked={checkedVal}
-              disabled={switching || isBusy}
-              error={errors.wifi_backend}
-              onChange={handleBackendToggle}
-            >
-              {lastResult?.success && (() => {
-                const timedOut = lastResult.reconnect_timed_out;
-                const parts: string[] = [`Switched to ${lastResult.backend}`];
-                if (lastResult.recovery_performed) parts.push("wlan0 interface recreated");
-                if (timedOut) parts.push("WiFi didn't reconnect");
-                return (
-                  <PanelSectionRow>
-                    <div
-                      style={{
-                        fontSize: theme.fontSize.small,
-                        color: timedOut ? theme.warning.text : theme.success.text,
-                        padding: "2px 0",
-                      }}
-                    >
-                      {timedOut ? "⚠" : "✓"} {parts.join(" · ")}
-                    </div>
-                  </PanelSectionRow>
-                );
-              })()}
-            </InfoRow>
-          );
-        })()}
+        {supported && status?.live?.backend_tool_available && (
+          <BackendToggleRow
+            status={status}
+            backendSwitch={backendSwitch}
+            error={errors.wifi_backend}
+            isBusy={isBusy}
+            onToggle={handleBackendToggle}
+          />
+        )}
       </PanelSection>
 
       {/* Live status */}
@@ -860,86 +815,16 @@ function Content() {
         </PanelSectionRow>
       </PanelSection>
 
-      {/* Updates */}
-      <PanelSection title="Updates">
-        <PanelSectionRow>
-          <DropdownItem
-            label="Update channel"
-            rgOptions={[
-              { data: "stable", label: "Stable" },
-              { data: "beta", label: "Beta" },
-            ]}
-            selectedOption={s?.update_channel ?? "stable"}
-            onChange={async (option: { data: string }) => {
-              await backend.setUpdateChannel(option.data);
-              setUpdateInfo(null);
-              await refreshStatus();
-            }}
-          />
-        </PanelSectionRow>
-        {updateError && !updating && (
-          <PanelSectionRow>
-            <div style={{ fontSize: theme.fontSize.body, color: theme.warning.text }}>
-              &#9888; {updateError}
-            </div>
-          </PanelSectionRow>
-        )}
-        {updating ? (
-          <PanelSectionRow>
-            <div style={{ fontSize: theme.fontSize.body, color: theme.info.text }}>
-              Updating... plugin will restart momentarily.
-            </div>
-          </PanelSectionRow>
-        ) : updateInfo?.update_available ? (
-          <>
-            <PanelSectionRow>
-              <div style={{ fontSize: theme.fontSize.body, color: theme.success.text }}>
-                v{updateInfo.latest_version} available (you have v{updateInfo.current_version})
-              </div>
-            </PanelSectionRow>
-            <PanelSectionRow>
-              <ButtonItem
-                layout="below"
-                onClick={async () => {
-                  setUpdateError(null);
-                  setUpdating(true);
-                  try { await backend.applyUpdate(); } catch { /* restart killed connection */ }
-                }}
-              >
-                Update Now
-              </ButtonItem>
-            </PanelSectionRow>
-          </>
-        ) : (
-          <>
-            {updateInfo && updateInfo.success === false && updateInfo.message && (
-              <PanelSectionRow>
-                <div style={{ fontSize: theme.fontSize.tiny, color: theme.error.text }}>
-                  {updateInfo.message}
-                </div>
-              </PanelSectionRow>
-            )}
-            <PanelSectionRow>
-              <ButtonItem
-                layout="below"
-                disabled={checkingUpdate}
-                onClick={async () => {
-                  setCheckingUpdate(true);
-                  setUpdateError(null);
-                  lastUpdateCheckAtRef.current = Date.now();
-                  try {
-                    const result = await backend.checkForUpdate();
-                    setUpdateInfo(result);
-                  } catch { /* ignore */ }
-                  setCheckingUpdate(false);
-                }}
-              >
-                {checkingUpdate ? "Checking..." : (updateInfo?.success && !updateInfo?.update_available) ? "Up to date" : "Check for Updates"}
-              </ButtonItem>
-            </PanelSectionRow>
-          </>
-        )}
-      </PanelSection>
+      <UpdatesSection
+        channel={s?.update_channel ?? "stable"}
+        updating={updating}
+        checkingUpdate={checkingUpdate}
+        updateInfo={updateInfo}
+        updateError={updateError}
+        onChannelChange={handleChannelChange}
+        onApply={handleApplyUpdate}
+        onCheck={handleCheckForUpdate}
+      />
 
       {/* Footer */}
       <PanelSection>
