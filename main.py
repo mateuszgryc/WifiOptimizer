@@ -95,10 +95,14 @@ def _save_settings_with_timestamp(data: dict):
 class Plugin:
     # ---- Helpers ----
 
-    def _run_cmd(self, cmd: list[str], timeout: int = 5) -> dict:
+    def _run_cmd(self, cmd: list[str], timeout: int = 5, clean_env: bool = False) -> dict:
         try:
+            env = None
+            if clean_env:
+                # Use system libraries, not Decky's bundled ones
+                env = {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=timeout
+                cmd, capture_output=True, text=True, timeout=timeout, env=env
             )
             return {
                 "success": result.returncode == 0,
@@ -1173,6 +1177,7 @@ class Plugin:
                     "https://api.github.com/repos/ArcadaLabs-Jason/WifiOptimizer/releases/latest",
                 ],
                 timeout=15,
+                clean_env=True,
             )
 
             if not result["success"] or not result["stdout"]:
@@ -1269,12 +1274,15 @@ systemctl restart plugin_loader 2>/dev/null || true
                 f.write(script)
             os.chmod(script_path, 0o700)
 
-            # Launch detached so it survives when plugin_loader kills us
+            # Launch detached with clean env so it survives when plugin_loader
+            # kills us and curl uses system SSL (not Decky's bundled one)
+            clean_env = {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
             subprocess.Popen(
                 ["/bin/bash", script_path],
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                env=clean_env,
             )
 
             decky.logger.info(f"Update to {tag} initiated")

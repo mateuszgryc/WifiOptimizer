@@ -605,22 +605,31 @@ function Content() {
             </PanelSectionRow>
           </>
         ) : (
-          <PanelSectionRow>
-            <ButtonItem
-              layout="below"
-              disabled={checkingUpdate}
-              onClick={async () => {
-                setCheckingUpdate(true);
-                try {
-                  const result = await backend.checkForUpdate();
-                  setUpdateInfo(result);
-                } catch { /* ignore */ }
-                setCheckingUpdate(false);
-              }}
-            >
-              {checkingUpdate ? "Checking..." : (updateInfo?.success && !updateInfo?.update_available) ? "Up to date" : "Check for Updates"}
-            </ButtonItem>
-          </PanelSectionRow>
+          <>
+            {updateInfo && updateInfo.success === false && updateInfo.message && (
+              <PanelSectionRow>
+                <div style={{ fontSize: "10px", color: "#ff878c" }}>
+                  {updateInfo.message}
+                </div>
+              </PanelSectionRow>
+            )}
+            <PanelSectionRow>
+              <ButtonItem
+                layout="below"
+                disabled={checkingUpdate}
+                onClick={async () => {
+                  setCheckingUpdate(true);
+                  try {
+                    const result = await backend.checkForUpdate();
+                    setUpdateInfo(result);
+                  } catch { /* ignore */ }
+                  setCheckingUpdate(false);
+                }}
+              >
+                {checkingUpdate ? "Checking..." : (updateInfo?.success && !updateInfo?.update_available) ? "Up to date" : "Check for Updates"}
+              </ButtonItem>
+            </PanelSectionRow>
+          </>
         )}
       </PanelSection>
 
