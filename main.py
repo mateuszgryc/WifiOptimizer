@@ -181,7 +181,7 @@ class Plugin:
         return None
 
     def _has_backend_tool(self) -> bool:
-        # Privileged helper is what we actually invoke — calling the wrapper fails
+        # Privileged helper is what we actually invoke - calling the wrapper fails
         # from a root systemd context because it goes through pkexec.
         return os.path.isfile(BACKEND_HELPER) and os.access(BACKEND_HELPER, os.X_OK)
 
@@ -387,7 +387,7 @@ class Plugin:
                         decky.logger.error(
                             f"Backend inconsistency: conf says '{conf_backend}' "
                             f"but systemd reports '{state}'. Likely an interrupted "
-                            f"backend switch — user can retry via the UI."
+                            f"backend switch - user can retry via the UI."
                         )
 
             decky.logger.info(
@@ -552,7 +552,7 @@ class Plugin:
                     if len(parts) >= 3:
                         status["live"]["connected_bssid"] = parts[2]
 
-            # Channel info — parse to "36 (80 MHz)" format
+            # Channel info - parse to "36 (80 MHz)" format
             info_result = self._run_cmd(
                 ["/usr/bin/iw", "dev", iface, "info"], timeout=T
             )
@@ -691,7 +691,7 @@ class Plugin:
                 return {"success": False, "error": "unexpected", "message": "Unsupported device. This plugin is designed for Steam Deck only."}
             iface = self._get_wifi_interface()
 
-            # Apply immediately if connected — verify before saving
+            # Apply immediately if connected - verify before saving
             if iface:
                 state = "off" if disabled else "on"
                 result = self._run_cmd(
@@ -805,7 +805,7 @@ class Plugin:
                 _save_settings_with_timestamp(settings)
                 self._hard_reconnect(uuid)
             else:
-                # Disabling works on saved profiles — no active WiFi needed
+                # Disabling works on saved profiles - no active WiFi needed
                 iface, uuid, _ = self._require_wifi()
                 if not uuid:
                     uuid = self._get_saved_connection_uuid()
@@ -1108,7 +1108,7 @@ class Plugin:
 
             # Order matters: BSSID lock reconnects WiFi which resets power_save.
             # Apply auto-fix and buffer tuning first (no reconnect), then BSSID
-            # lock (reconnects — dispatcher reapplies settings), then power_save
+            # lock (reconnects - dispatcher reapplies settings), then power_save
             # last to ensure it sticks.
             r = await self.set_auto_fix(True)
             results["auto_fix"] = r
@@ -1465,7 +1465,7 @@ systemctl restart plugin_loader 2>/dev/null || true
             is_oled = settings.get("model") == "oled"
             other = "iwd" if target == "wpa_supplicant" else "wpa_supplicant"
 
-            # Phase: switching — write config then restart services.
+            # Phase: switching - write config then restart services.
             # clean_env=True clears LD_LIBRARY_PATH so bash doesn't hit a symbol
             # lookup error against Decky's bundled readline (same class of bug
             # as the curl/OpenSSL conflict).
@@ -1512,7 +1512,7 @@ systemctl restart plugin_loader 2>/dev/null || true
                 if iface_check != "wlan0":
                     needs_reboot = True
 
-            # Phase: reconnecting — wait for NM to reconnect to WiFi
+            # Phase: reconnecting - wait for NM to reconnect to WiFi
             reconnect_timed_out = False
             if not needs_reboot:
                 self._backend_switch["phase"] = "reconnecting"

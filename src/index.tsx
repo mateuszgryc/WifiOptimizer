@@ -55,7 +55,7 @@ function getBadge(
   _activeText: string = "active"
 ): { badge: BadgeStatus; text: string } | null {
   // Only surface a badge when it tells the user something the toggle position
-  // doesn't — failure or drift between our setting and the system state.
+  // doesn't - failure or drift between our setting and the system state.
   // Binary on/off badges are redundant with the toggle itself and are hidden.
   if (errorKey) return { badge: "error", text: "failed" };
   if (driftKey && status?.drift?.[driftKey]) return { badge: "drifted", text: "drifted" };
@@ -85,7 +85,7 @@ function Content() {
   const prevConnectedRef = useRef<boolean | null>(null);
   const lastUpdateCheckAtRef = useRef<number>(0);
 
-  // Runs checkForUpdate with dedupe — skips if a check was issued within the
+  // Runs checkForUpdate with dedupe - skips if a check was issued within the
   // dedupe window. Lowers GitHub API pressure in CGNAT/dorm scenarios where
   // many Decks share an IP. Manual button bypasses this (force=true).
   const runUpdateCheck = useCallback((force: boolean = false) => {
@@ -130,7 +130,7 @@ function Content() {
           return;
         }
         // Terminal. Stop polling, then refresh status BEFORE clearing the
-        // in_progress flag — this keeps the optimistic toggle position steady
+        // in_progress flag - this keeps the optimistic toggle position steady
         // until live.wifi_backend has caught up, avoiding a toggle/untoggle
         // flicker at the end of the switch.
         stopBackendPoll();
@@ -176,7 +176,7 @@ function Content() {
     };
   }, [refreshStatus, beginBackendPoll, runUpdateCheck]);
 
-  // Retry update check when connectivity recovers — the initial one-shot check
+  // Retry update check when connectivity recovers - the initial one-shot check
   // in the mount effect misses the case where the panel was already open when
   // the network came back. Skip until status has loaded to avoid a spurious
   // null→true "transition" firing an extra check on every mount.
@@ -190,7 +190,7 @@ function Content() {
     }
   }, [status?.connected, runUpdateCheck]);
 
-  // Periodic update re-check — QAM often caches the panel across close/reopen,
+  // Periodic update re-check - QAM often caches the panel across close/reopen,
   // so the mount-effect check doesn't re-fire. This heartbeat catches new
   // releases when the panel has been left open for a while. Paused when the
   // panel/tab is hidden to avoid pointless GitHub calls accumulating while the
@@ -525,7 +525,7 @@ function Content() {
       {backendSwitch && !backendSwitch.in_progress && backendSwitch.result && (() => {
         const r = backendSwitch.result;
         // Treat reconnect timeout as a warning even when the backend-level
-        // switch succeeded — the system is switched but WiFi didn't come back.
+        // switch succeeded - the system is switched but WiFi didn't come back.
         const isWarning = !r.success || r.needs_reboot || r.reconnect_timed_out;
         let text: string;
         if (r.needs_reboot) {
@@ -785,7 +785,7 @@ function Content() {
                   ? { badge: "active", text: "wpa_supplicant" }
                   : { badge: "off", text: "iwd" };
           // Inline result shown right under the toggle so it's visible where the
-          // user clicked — the top-of-panel banner is often off-screen when the
+          // user clicked - the top-of-panel banner is often off-screen when the
           // user is scrolled down to the Advanced section.
           const lastResult =
             !switching &&
