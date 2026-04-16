@@ -15,6 +15,7 @@ export interface PluginSettings {
   buffer_tuning_enabled: boolean;
   last_connection_uuid: string;
   priority_set: boolean;
+  update_channel: string;
   last_applied: number;
 }
 
@@ -67,6 +68,7 @@ export interface UpdateCheckResult {
   current_version?: string;
   latest_version?: string;
   update_available?: boolean;
+  channel?: string;
   release_url?: string;
   error?: string;
   message?: string;

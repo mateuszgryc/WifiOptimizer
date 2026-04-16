@@ -12,5 +12,6 @@ export const setBufferTuning = callable<[enabled: boolean], MethodResult>("set_b
 export const optimizeSafe = callable<[], OptimizeSafeResult>("optimize_safe");
 export const reapplyAll = callable<[], OptimizeSafeResult>("reapply_all");
 export const resetSettings = callable<[], MethodResult>("reset_settings");
+export const setUpdateChannel = callable<[channel: string], MethodResult>("set_update_channel");
 export const checkForUpdate = callable<[], UpdateCheckResult>("check_for_update");
 export const applyUpdate = callable<[], MethodResult>("apply_update");

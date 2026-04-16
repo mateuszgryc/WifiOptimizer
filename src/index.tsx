@@ -577,6 +577,21 @@ function Content() {
 
       {/* Updates */}
       <PanelSection title="Updates">
+        <PanelSectionRow>
+          <DropdownItem
+            label="Update channel"
+            rgOptions={[
+              { data: "stable", label: "Stable" },
+              { data: "beta", label: "Beta" },
+            ]}
+            selectedOption={s?.update_channel ?? "stable"}
+            onChange={(option: { data: string }) => {
+              backend.setUpdateChannel(option.data);
+              setUpdateInfo(null);
+              refreshStatus();
+            }}
+          />
+        </PanelSectionRow>
         {updating ? (
           <PanelSectionRow>
             <div style={{ fontSize: "12px", color: "#60baff" }}>

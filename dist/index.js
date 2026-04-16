@@ -95,6 +95,7 @@ const setBufferTuning = callable("set_buffer_tuning");
 const optimizeSafe = callable("optimize_safe");
 const reapplyAll = callable("reapply_all");
 const resetSettings = callable("reset_settings");
+const setUpdateChannel = callable("set_update_channel");
 const checkForUpdate = callable("check_for_update");
 const applyUpdate = callable("apply_update");
 
@@ -462,21 +463,28 @@ function Content() {
                                         } }) }))] })) }), SP_JSX.jsx(InfoRow, { label: "Disable IPv6", subtitle: "Use IPv4 only on this network", explanation: "Some networks have poor or misconfigured IPv6 support, which can cause slow DNS resolution, connection timeouts, or routing issues. Disabling IPv6 forces all traffic through IPv4. Only enable this if you're experiencing issues - most modern networks handle IPv6 fine.", ...getBadge(s?.ipv6_disabled ?? false, undefined, status, errors.ipv6 ?? null), checked: s?.ipv6_disabled ?? false, disabled: !connected && !s?.ipv6_disabled, error: errors.ipv6, onChange: (val) => handleToggle("ipv6", () => setIpv6(val)) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Live status", children: [connected && status?.live?.ip_address && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "10px", color: "#8a8a9a" }, children: ["IP: ", status.live.ip_address] }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(StatsGrid, { live: status?.live ?? {}, connected: connected }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Actions", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: !connected || !supported, onClick: () => handleToggle("reapply", () => reapplyAll()), children: "Force Reapply All" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: async () => {
                                 await resetSettings();
                                 await refreshStatus();
-                            }, children: "Reset Settings" }) })] }), SP_JSX.jsx(DFL.PanelSection, { title: "Updates", children: updating ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#60baff" }, children: "Updating... plugin will restart momentarily." }) })) : updateInfo?.update_available ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", color: "#3fc56e" }, children: ["v", updateInfo.latest_version, " available (you have v", updateInfo.current_version, ")"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: async () => {
-                                    setUpdating(true);
-                                    try {
-                                        await applyUpdate();
-                                    }
-                                    catch { /* restart killed connection */ }
-                                }, children: "Update Now" }) })] })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [updateInfo && updateInfo.success === false && updateInfo.message && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "10px", color: "#ff878c" }, children: updateInfo.message }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate, onClick: async () => {
-                                    setCheckingUpdate(true);
-                                    try {
-                                        const result = await checkForUpdate();
-                                        setUpdateInfo(result);
-                                    }
-                                    catch { /* ignore */ }
-                                    setCheckingUpdate(false);
-                                }, children: checkingUpdate ? "Checking..." : (updateInfo?.success && !updateInfo?.update_available) ? "Up to date" : "Check for Updates" }) })] })) }), SP_JSX.jsxs(DFL.PanelSection, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "10px", color: "#4a4a5a" }, children: ["v", status?.version ?? "?", " - by jasonridesabike"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "10px", color: "#4a4a5a" }, children: ["If WiFi won't reconnect, a reboot usually fixes it.", SP_JSX.jsx("br", {}), "Bugs? Report at github.com/ArcadaLabs-Jason/WifiOptimizer"] }) })] })] }));
+                            }, children: "Reset Settings" }) })] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Update channel", rgOptions: [
+                                { data: "stable", label: "Stable" },
+                                { data: "beta", label: "Beta" },
+                            ], selectedOption: s?.update_channel ?? "stable", onChange: (option) => {
+                                setUpdateChannel(option.data);
+                                setUpdateInfo(null);
+                                refreshStatus();
+                            } }) }), updating ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#60baff" }, children: "Updating... plugin will restart momentarily." }) })) : updateInfo?.update_available ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", color: "#3fc56e" }, children: ["v", updateInfo.latest_version, " available (you have v", updateInfo.current_version, ")"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: async () => {
+                                        setUpdating(true);
+                                        try {
+                                            await applyUpdate();
+                                        }
+                                        catch { /* restart killed connection */ }
+                                    }, children: "Update Now" }) })] })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [updateInfo && updateInfo.success === false && updateInfo.message && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "10px", color: "#ff878c" }, children: updateInfo.message }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate, onClick: async () => {
+                                        setCheckingUpdate(true);
+                                        try {
+                                            const result = await checkForUpdate();
+                                            setUpdateInfo(result);
+                                        }
+                                        catch { /* ignore */ }
+                                        setCheckingUpdate(false);
+                                    }, children: checkingUpdate ? "Checking..." : (updateInfo?.success && !updateInfo?.update_available) ? "Up to date" : "Check for Updates" }) })] }))] }), SP_JSX.jsxs(DFL.PanelSection, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "10px", color: "#4a4a5a" }, children: ["v", status?.version ?? "?", " - by jasonridesabike"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "10px", color: "#4a4a5a" }, children: ["If WiFi won't reconnect, a reboot usually fixes it.", SP_JSX.jsx("br", {}), "Bugs? Report at github.com/ArcadaLabs-Jason/WifiOptimizer"] }) })] })] }));
 }
 var index = definePlugin(() => {
     return {
