@@ -2,7 +2,20 @@ import os
 import json
 import time
 import subprocess
-import decky
+
+try:
+    import decky
+except ImportError:
+    # Fallback if decky module is unavailable (shouldn't happen in normal operation)
+    class decky:  # type: ignore
+        DECKY_PLUGIN_SETTINGS_DIR = "/tmp/wifi-optimizer"
+        DECKY_PLUGIN_DIR = "/tmp/wifi-optimizer"
+        DECKY_PLUGIN_VERSION = "0.0.0"
+        class logger:
+            @staticmethod
+            def info(msg): print(f"[INFO] {msg}")
+            @staticmethod
+            def error(msg): print(f"[ERROR] {msg}")
 
 DISPATCHER_PATH = "/etc/NetworkManager/dispatcher.d/99-wifi-optimizer"
 NM_CONF_PATH = "/etc/NetworkManager/conf.d/99-wifi-optimizer.conf"
@@ -14,8 +27,13 @@ RTW88_SYSFS_PARAMS = [
     "/sys/module/rtw88_core/parameters/disable_lps_deep",
     "/sys/module/rtw88_pci/parameters/disable_aspm",
 ]
-SETTINGS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
-ENFORCED_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "last_enforced")
+
+try:
+    SETTINGS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
+    ENFORCED_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "last_enforced")
+except Exception:
+    SETTINGS_FILE = "/tmp/wifi-optimizer/settings.json"
+    ENFORCED_FILE = "/tmp/wifi-optimizer/last_enforced"
 
 DNS_PROVIDERS = {
     "cloudflare": "1.1.1.1 1.0.0.1",
