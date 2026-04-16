@@ -270,6 +270,39 @@ const DNS_OPTIONS = [
     { data: "quad9", label: "Quad9 (9.9.9.9)" },
     { data: "custom", label: "Custom" },
 ];
+// Catches render-time exceptions in the panel tree so a bad status shape or
+// other unexpected error surfaces a recoverable message instead of Decky
+// blanking the panel. The child tree is re-entered on next mount (panel
+// reopen), so users can recover without a plugin restart.
+class ErrorBoundary extends SP_REACT.Component {
+    constructor() {
+        super(...arguments);
+        this.state = { err: null };
+    }
+    static getDerivedStateFromError(err) {
+        return { err };
+    }
+    componentDidCatch(err, info) {
+        console.error("WiFi Optimizer render error:", err, info);
+    }
+    render() {
+        if (this.state.err) {
+            return (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: {
+                            display: "flex",
+                            gap: "6px",
+                            padding: "8px 12px",
+                            background: "rgba(211,36,43,0.08)",
+                            border: "0.5px solid rgba(211,36,43,0.2)",
+                            borderRadius: "8px",
+                            fontSize: "12px",
+                            color: "#ff878c",
+                            width: "100%",
+                            boxSizing: "border-box",
+                        }, children: SP_JSX.jsx("span", { children: "WiFi Optimizer hit an unexpected error. Close and reopen the panel to recover. If it keeps happening, please report at github.com/ArcadaLabs-Jason/WifiOptimizer." }) }) }) }));
+        }
+        return this.props.children;
+    }
+}
 function Content() {
     const [status, setStatus] = SP_REACT.useState(null);
     const [errors, setErrors] = SP_REACT.useState({});
@@ -440,6 +473,11 @@ function Content() {
         };
     }, [runUpdateCheck]);
     const handleBackendToggle = async (on) => {
+        // Re-entrancy guard: drop rapid clicks or clicks that land while another
+        // operation is already running. Protects against duplicate backend calls
+        // and the Force-Reapply/backend-switch overlap case.
+        if (busyRef.current)
+            return;
         const target = on ? "wpa_supplicant" : "iwd";
         busyRef.current = true;
         setErrors((prev) => {
@@ -481,6 +519,8 @@ function Content() {
         }
     };
     const handleToggle = async (key, fn) => {
+        if (busyRef.current)
+            return;
         busyRef.current = true;
         setErrors((prev) => {
             const next = { ...prev };
@@ -506,6 +546,8 @@ function Content() {
         await refreshStatus();
     };
     const handleOptimize = async () => {
+        if (busyRef.current)
+            return;
         busyRef.current = true;
         setApplyingAll(true);
         setErrors({});
@@ -764,7 +806,7 @@ var index = definePlugin(() => {
     return {
         name: "WiFi Optimizer",
         titleView: SP_JSX.jsx("div", { className: DFL.staticClasses.Title, children: "WiFi Optimizer" }),
-        content: SP_JSX.jsx(Content, {}),
+        content: (SP_JSX.jsx(ErrorBoundary, { children: SP_JSX.jsx(Content, {}) })),
         icon: SP_JSX.jsx(FaWifi, {}),
         onDismount() { },
     };

@@ -1,4 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import {
   PanelSection,
   PanelSectionRow,
@@ -67,6 +75,57 @@ const DNS_OPTIONS = [
   { data: "quad9", label: "Quad9 (9.9.9.9)" },
   { data: "custom", label: "Custom" },
 ];
+
+// Catches render-time exceptions in the panel tree so a bad status shape or
+// other unexpected error surfaces a recoverable message instead of Decky
+// blanking the panel. The child tree is re-entered on next mount (panel
+// reopen), so users can recover without a plugin restart.
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { err: Error | null }
+> {
+  state = { err: null as Error | null };
+
+  static getDerivedStateFromError(err: Error) {
+    return { err };
+  }
+
+  componentDidCatch(err: Error, info: ErrorInfo) {
+    console.error("WiFi Optimizer render error:", err, info);
+  }
+
+  render() {
+    if (this.state.err) {
+      return (
+        <PanelSection>
+          <PanelSectionRow>
+            <div
+              style={{
+                display: "flex",
+                gap: "6px",
+                padding: "8px 12px",
+                background: "rgba(211,36,43,0.08)",
+                border: "0.5px solid rgba(211,36,43,0.2)",
+                borderRadius: "8px",
+                fontSize: "12px",
+                color: "#ff878c",
+                width: "100%",
+                boxSizing: "border-box",
+              }}
+            >
+              <span>
+                WiFi Optimizer hit an unexpected error. Close and reopen the
+                panel to recover. If it keeps happening, please report at
+                github.com/ArcadaLabs-Jason/WifiOptimizer.
+              </span>
+            </div>
+          </PanelSectionRow>
+        </PanelSection>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function Content() {
   const [status, setStatus] = useState<PluginStatus | null>(null);
@@ -240,6 +299,10 @@ function Content() {
   }, [runUpdateCheck]);
 
   const handleBackendToggle = async (on: boolean) => {
+    // Re-entrancy guard: drop rapid clicks or clicks that land while another
+    // operation is already running. Protects against duplicate backend calls
+    // and the Force-Reapply/backend-switch overlap case.
+    if (busyRef.current) return;
     const target = on ? "wpa_supplicant" : "iwd";
     busyRef.current = true;
     setErrors((prev) => {
@@ -282,6 +345,7 @@ function Content() {
   };
 
   const handleToggle = async (key: string, fn: () => Promise<MethodResult>) => {
+    if (busyRef.current) return;
     busyRef.current = true;
     setErrors((prev) => {
       const next = { ...prev };
@@ -308,6 +372,7 @@ function Content() {
   };
 
   const handleOptimize = async () => {
+    if (busyRef.current) return;
     busyRef.current = true;
     setApplyingAll(true);
     setErrors({});
@@ -987,7 +1052,11 @@ export default definePlugin(() => {
   return {
     name: "WiFi Optimizer",
     titleView: <div className={staticClasses.Title}>WiFi Optimizer</div>,
-    content: <Content />,
+    content: (
+      <ErrorBoundary>
+        <Content />
+      </ErrorBoundary>
+    ),
     icon: <FaWifi />,
     onDismount() {},
   };
