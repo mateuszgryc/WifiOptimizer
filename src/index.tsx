@@ -618,7 +618,7 @@ function Content() {
                 setCheckingUpdate(false);
               }}
             >
-              {checkingUpdate ? "Checking..." : updateInfo ? "Up to date" : "Check for Updates"}
+              {checkingUpdate ? "Checking..." : (updateInfo?.success && !updateInfo?.update_available) ? "Up to date" : "Check for Updates"}
             </ButtonItem>
           </PanelSectionRow>
         )}

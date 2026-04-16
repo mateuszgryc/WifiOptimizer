@@ -1164,6 +1164,8 @@ class Plugin:
         """Check GitHub for a newer release."""
         try:
             current = decky.DECKY_PLUGIN_VERSION
+            decky.logger.info(f"Update check: current version {current}")
+
             result = self._run_cmd(
                 [
                     "/usr/bin/curl", "-sL", "--max-time", "10",
@@ -1172,39 +1174,50 @@ class Plugin:
                 ],
                 timeout=15,
             )
+
             if not result["success"] or not result["stdout"]:
+                decky.logger.error(f"Update check: curl failed - rc={result.get('returncode')}, stderr={result.get('stderr', '')[:200]}")
                 return {
-                    "success": True,
+                    "success": False,
                     "current_version": current,
                     "update_available": False,
+                    "message": "Couldn't reach GitHub",
                 }
 
             data = json.loads(result["stdout"])
             tag = data.get("tag_name", "")
             latest = tag.lstrip("v")
+
             if not latest:
+                msg = data.get("message", "no tag_name in response")
+                decky.logger.error(f"Update check: no tag - {msg}")
                 return {
-                    "success": True,
+                    "success": False,
                     "current_version": current,
                     "update_available": False,
+                    "message": msg,
                 }
 
             current_tuple = tuple(int(x) for x in current.split("."))
             latest_tuple = tuple(int(x) for x in latest.split("."))
+            update_available = latest_tuple > current_tuple
+
+            decky.logger.info(f"Update check: current={current}, latest={latest}, update={update_available}")
 
             return {
                 "success": True,
                 "current_version": current,
                 "latest_version": latest,
-                "update_available": latest_tuple > current_tuple,
+                "update_available": update_available,
                 "release_url": data.get("html_url", ""),
             }
         except Exception as e:
             decky.logger.error(f"check_for_update error: {e}")
             return {
-                "success": True,
+                "success": False,
                 "current_version": decky.DECKY_PLUGIN_VERSION,
                 "update_available": False,
+                "message": str(e),
             }
 
     async def apply_update(self) -> dict:
