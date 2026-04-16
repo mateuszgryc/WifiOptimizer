@@ -24,6 +24,8 @@ Switch back to Game Mode. Open the Quick Access Menu (**...** button) > Decky > 
 
 **Updating:** The plugin checks for updates automatically when you open it. If an update is available, an update button appears at the top of the panel - tap it and the plugin updates and restarts itself. You can also update manually by running the install command above again.
 
+> **Note:** If you're on a version before v0.6.6, the in-app updater had bugs. Please update manually using the install command above to get working auto-updates.
+
 ## Getting started
 
 1. Open WiFi Optimizer from the Decky sidebar
