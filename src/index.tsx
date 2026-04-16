@@ -6,7 +6,6 @@ import {
   DropdownItem,
   TextField,
   staticClasses,
-  Spinner,
 } from "@decky/ui";
 import { definePlugin } from "@decky/api";
 import { FaWifi } from "react-icons/fa";
@@ -52,7 +51,6 @@ const DNS_OPTIONS = [
 
 function Content() {
   const [status, setStatus] = useState<PluginStatus | null>(null);
-  const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [applyingAll, setApplyingAll] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<OptimizeSafeResult | null>(null);
@@ -79,7 +77,7 @@ function Content() {
   }, []);
 
   useEffect(() => {
-    refreshStatus().finally(() => setLoading(false));
+    refreshStatus();
     intervalRef.current = setInterval(refreshStatus, REFRESH_INTERVAL);
     // One-time update check on panel open
     backend.checkForUpdate().then(setUpdateInfo).catch(() => {});
@@ -144,16 +142,6 @@ function Content() {
     }
     await refreshStatus();
   };
-
-  if (loading) {
-    return (
-      <PanelSection title="WiFi Optimizer">
-        <PanelSectionRow>
-          <Spinner />
-        </PanelSectionRow>
-      </PanelSection>
-    );
-  }
 
   const s = status?.settings;
   const connected = status?.connected ?? false;

@@ -255,7 +255,6 @@ const DNS_OPTIONS = [
 ];
 function Content() {
     const [status, setStatus] = SP_REACT.useState(null);
-    const [loading, setLoading] = SP_REACT.useState(true);
     const [errors, setErrors] = SP_REACT.useState({});
     const [applyingAll, setApplyingAll] = SP_REACT.useState(false);
     const [optimizeResult, setOptimizeResult] = SP_REACT.useState(null);
@@ -282,7 +281,7 @@ function Content() {
         }
     }, []);
     SP_REACT.useEffect(() => {
-        refreshStatus().finally(() => setLoading(false));
+        refreshStatus();
         intervalRef.current = setInterval(refreshStatus, REFRESH_INTERVAL);
         // One-time update check on panel open
         checkForUpdate().then(setUpdateInfo).catch(() => { });
@@ -348,9 +347,6 @@ function Content() {
         }
         await refreshStatus();
     };
-    if (loading) {
-        return (SP_JSX.jsx(DFL.PanelSection, { title: "WiFi Optimizer", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Spinner, {}) }) }));
-    }
     const s = status?.settings;
     const connected = status?.connected ?? false;
     const supported = status?.supported ?? true;
