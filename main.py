@@ -1425,14 +1425,17 @@ systemctl restart plugin_loader 2>/dev/null || true
             is_oled = settings.get("model") == "oled"
             other = "iwd" if target == "wpa_supplicant" else "wpa_supplicant"
 
-            # Phase: switching — write config then restart services
+            # Phase: switching — write config then restart services.
+            # clean_env=True clears LD_LIBRARY_PATH so bash doesn't hit a symbol
+            # lookup error against Decky's bundled readline (same class of bug
+            # as the curl/OpenSSL conflict).
             self._backend_switch["phase"] = "switching"
             decky.logger.info(
                 f"backend switch: calling helper write_config target={target} "
                 f"(euid={os.geteuid()}, helper={BACKEND_HELPER})"
             )
             write_result = await asyncio.to_thread(
-                self._run_cmd, [BACKEND_HELPER, "write_config", target], 5, False
+                self._run_cmd, [BACKEND_HELPER, "write_config", target], 5, True
             )
             decky.logger.info(
                 f"backend switch: write_config result rc={write_result.get('returncode')} "
@@ -1455,7 +1458,7 @@ systemctl restart plugin_loader 2>/dev/null || true
                 return
 
             restart_result = await asyncio.to_thread(
-                self._run_cmd, [BACKEND_HELPER, "restart_units", other], 45, False
+                self._run_cmd, [BACKEND_HELPER, "restart_units", other], 45, True
             )
             rs_stdout = restart_result.get("stdout", "")
             rs_stderr = restart_result.get("stderr", "")

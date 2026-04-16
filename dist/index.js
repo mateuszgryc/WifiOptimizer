@@ -278,6 +278,7 @@ function Content() {
     const intervalRef = SP_REACT.useRef(null);
     const backendPollRef = SP_REACT.useRef(null);
     const busyRef = SP_REACT.useRef(false);
+    const prevConnectedRef = SP_REACT.useRef(null);
     const refreshStatus = SP_REACT.useCallback(async () => {
         if (busyRef.current)
             return;
@@ -329,7 +330,9 @@ function Content() {
     SP_REACT.useEffect(() => {
         refreshStatus();
         intervalRef.current = setInterval(refreshStatus, REFRESH_INTERVAL);
-        // One-time update check on panel open
+        // Initial update check. If it fails (e.g., no network yet), the effect
+        // below retries on connectivity recovery. QAM tends to cache the panel
+        // across close/open, so we can't rely on remount to retry.
         checkForUpdate().then(setUpdateInfo).catch(() => { });
         // Resume backend-switch polling if one is in flight (panel was reopened mid-switch)
         getBackendSwitchStatus()
@@ -348,6 +351,20 @@ function Content() {
                 clearInterval(backendPollRef.current);
         };
     }, [refreshStatus, beginBackendPoll]);
+    // Retry update check when connectivity recovers — the initial one-shot check
+    // in the mount effect misses the case where the panel was already open when
+    // the network came back. Skip until status has loaded to avoid a spurious
+    // null→true "transition" firing an extra check on every mount.
+    SP_REACT.useEffect(() => {
+        if (!status)
+            return;
+        const connected = status.connected;
+        const prev = prevConnectedRef.current;
+        prevConnectedRef.current = connected;
+        if (prev === false && connected === true) {
+            checkForUpdate().then(setUpdateInfo).catch(() => { });
+        }
+    }, [status?.connected]);
     const handleBackendToggle = async (on) => {
         const target = on ? "wpa_supplicant" : "iwd";
         busyRef.current = true;
