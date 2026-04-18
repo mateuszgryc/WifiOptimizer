@@ -34,23 +34,30 @@ This requires a user password - set one with `passwd` in Konsole if you haven't 
 
 Switch back to Game Mode. Open the Quick Access Menu (**...** button) > Decky > WiFi Optimizer.
 
-**Updating:** This fork does not check for or install updates from inside Decky. To update, manually rerun the install command above after reviewing the changes you want to install.
+The installer also adds a Desktop Mode launcher named **Update WiFi Optimizer**. It opens a terminal helper that:
+
+- shows the currently installed version
+- fetches available tags from this fork
+- lets you choose a tag or `main`
+- runs the installer only after explicit confirmation
 
 **Difference from upstream:** the original project included an in-app updater. This fork intentionally disables that feature so the plugin cannot replace its own root-running code from GitHub.
 
 ### Manual update process
 
-1. Review the changes in this fork and decide which commit or branch tip you want to install.
-2. On the Steam Deck, open Desktop Mode > Konsole.
-3. Re-run the installer from this fork:
+1. Open Desktop Mode on the Steam Deck.
+2. Launch **Update WiFi Optimizer** from the Desktop or application launcher.
+3. Review the currently installed version and the list of available tags.
+4. Choose the version you want to install and confirm.
+5. Enter your password when `sudo` prompts for it.
+
+If you prefer the terminal directly, you can still rerun the installer yourself:
 
 ```bash
 curl -sL https://github.com/mateuszgryc/WifiOptimizer/raw/main/install.sh -o /tmp/wifi-opt-install.sh && sudo bash /tmp/wifi-opt-install.sh
 ```
 
-4. Open Decky again in Game Mode and confirm the plugin version and behavior.
-
-The installer preserves the plugin directory and replaces the installed files with the version from this fork. Because updates are manual, you control when the plugin changes.
+The installer preserves the plugin directory and replaces the installed files with the selected version from this fork. Because updates are manual, you control when the plugin changes.
 
 ## Getting started
 

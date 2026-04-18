@@ -1,10 +1,13 @@
 #!/bin/bash
 # WiFi Optimizer - Decky Plugin Installer
-# Usage: curl -sL https://github.com/ArcadaLabs-Jason/WifiOptimizer/raw/main/install.sh -o /tmp/wifi-opt-install.sh && sudo bash /tmp/wifi-opt-install.sh
+# Usage: curl -sL https://github.com/mateuszgryc/WifiOptimizer/raw/main/install.sh -o /tmp/wifi-opt-install.sh && sudo bash /tmp/wifi-opt-install.sh
 
 set -e
 
 PLUGIN_NAME="WiFi Optimizer"
+REPO_SLUG="mateuszgryc/WifiOptimizer"
+INSTALL_URL="https://github.com/$REPO_SLUG/raw/main/install.sh"
+SELECTED_REF="${WIFI_OPTIMIZER_REF:-latest}"
 
 # Check for root (needed to write to plugin dir and restart service)
 if [ "$(id -u)" -ne 0 ]; then
@@ -30,18 +33,27 @@ if [ ! -d "$PLUGIN_BASE" ]; then
     exit 1
 fi
 
-# Fetch latest release tag from GitHub
-echo "Checking for latest release..."
-LATEST_TAG=$(curl -sL "https://api.github.com/repos/ArcadaLabs-Jason/WifiOptimizer/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+if [ "$SELECTED_REF" = "latest" ]; then
+    echo "Checking for latest release..."
+    LATEST_TAG=$(curl -sL "https://api.github.com/repos/$REPO_SLUG/releases/latest" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
 
-if [ -z "$LATEST_TAG" ]; then
-    echo "Warning: Couldn't fetch latest release, falling back to main branch"
-    REPO_URL="https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/heads/main.tar.gz"
+    if [ -z "$LATEST_TAG" ]; then
+        echo "Warning: Couldn't fetch latest release, falling back to main branch"
+        SELECTED_REF="main"
+    else
+        echo "Latest release: $LATEST_TAG"
+        SELECTED_REF="$LATEST_TAG"
+    fi
+fi
+
+if [ "$SELECTED_REF" = "main" ]; then
+    REPO_URL="https://github.com/$REPO_SLUG/archive/refs/heads/main.tar.gz"
     DIR_NAME="WifiOptimizer-main"
+    DISPLAY_REF="main"
 else
-    echo "Latest release: $LATEST_TAG"
-    REPO_URL="https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/tags/${LATEST_TAG}.tar.gz"
-    DIR_NAME="WifiOptimizer-${LATEST_TAG#v}"
+    REPO_URL="https://github.com/$REPO_SLUG/archive/refs/tags/${SELECTED_REF}.tar.gz"
+    DIR_NAME="WifiOptimizer-${SELECTED_REF#v}"
+    DISPLAY_REF="$SELECTED_REF"
 fi
 
 TMP_DIR=$(mktemp -d)
@@ -84,13 +96,38 @@ cp "$SRC/dist/index.js.map" "$PLUGIN_DIR/dist/" 2>/dev/null || true
 cp "$SRC/defaults/dispatcher.sh.tmpl" "$PLUGIN_DIR/defaults/"
 touch "$PLUGIN_DIR/py_modules/.keep"
 
+# Install a local manual-update helper and Desktop launcher for the deck user.
+USER_BIN_DIR="$USER_HOME/.local/bin"
+APPLICATIONS_DIR="$USER_HOME/.local/share/applications"
+DESKTOP_DIR="$USER_HOME/Desktop"
+HELPER_PATH="$USER_BIN_DIR/wifi-optimizer-update"
+LAUNCHER_NAME="Update WiFi Optimizer.desktop"
+
+mkdir -p "$USER_BIN_DIR" "$APPLICATIONS_DIR" "$DESKTOP_DIR"
+
+sed \
+    -e "s|__REPO_SLUG__|$REPO_SLUG|g" \
+    -e "s|__INSTALL_URL__|$INSTALL_URL|g" \
+    -e "s|__PLUGIN_DIR__|$PLUGIN_DIR|g" \
+    "$SRC/support/update-helper.sh.tmpl" > "$HELPER_PATH"
+chmod 755 "$HELPER_PATH"
+chown "$DECK_USER":"$DECK_USER" "$HELPER_PATH"
+
+for launcher_target in "$APPLICATIONS_DIR/$LAUNCHER_NAME" "$DESKTOP_DIR/$LAUNCHER_NAME"; do
+    sed -e "s|__HELPER_PATH__|$HELPER_PATH|g" \
+        "$SRC/support/update-launcher.desktop.tmpl" > "$launcher_target"
+    chmod 755 "$launcher_target"
+    chown "$DECK_USER":"$DECK_USER" "$launcher_target"
+done
+
 # Restart Decky
 echo "Restarting Decky Loader..."
 systemctl restart plugin_loader 2>/dev/null || true
 
 echo ""
 if [ "$UPGRADING" = true ]; then
-    echo "WiFi Optimizer updated! Your settings have been preserved."
+    echo "WiFi Optimizer updated to $DISPLAY_REF! Your settings have been preserved."
 else
-    echo "WiFi Optimizer installed! Open the Quick Access Menu to configure."
+    echo "WiFi Optimizer installed from $DISPLAY_REF! Open the Quick Access Menu to configure."
 fi
+echo "Desktop launcher installed: $DESKTOP_DIR/$LAUNCHER_NAME"

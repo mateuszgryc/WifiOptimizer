@@ -1,0 +1,131 @@
+#!/bin/bash
+
+set -euo pipefail
+
+REPO_SLUG="__REPO_SLUG__"
+INSTALL_URL="__INSTALL_URL__"
+PLUGIN_DIR="__PLUGIN_DIR__"
+
+read_installed_version() {
+    if [ ! -f "$PLUGIN_DIR/package.json" ]; then
+        return 0
+    fi
+    python3 - "$PLUGIN_DIR/package.json" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        print(json.load(f).get("version", "").strip())
+except Exception:
+    pass
+PY
+}
+
+fetch_tags() {
+    curl -fsSL "https://api.github.com/repos/$REPO_SLUG/tags?per_page=100" | python3 -c '
+import json
+import sys
+
+def version_key(tag: str):
+    raw = tag.lstrip("v")
+    parts = []
+    for item in raw.replace("-", ".").split("."):
+        if item.isdigit():
+            parts.append((0, int(item)))
+        else:
+            parts.append((1, item))
+    return parts
+
+data = json.load(sys.stdin)
+tags = [item.get("name", "").strip() for item in data if item.get("name")]
+tags = sorted(set(tags), key=version_key, reverse=True)
+for tag in tags:
+    print(tag)
+'
+}
+
+CURRENT_VERSION="$(read_installed_version)"
+if [ -n "$CURRENT_VERSION" ]; then
+    echo "Current installed version: v$CURRENT_VERSION"
+else
+    echo "Current installed version: not installed"
+fi
+echo
+echo "Fetching available versions from $REPO_SLUG..."
+
+if ! mapfile -t TAGS < <(fetch_tags); then
+    echo "Failed to fetch tags from GitHub."
+    echo "Check your network connection and try again."
+    exit 1
+fi
+
+if [ "${#TAGS[@]}" -eq 0 ]; then
+    echo "No tags were returned by GitHub."
+    exit 1
+fi
+
+OPTIONS=("main")
+OPTIONS+=("${TAGS[@]}")
+
+echo
+echo "Available versions:"
+for i in "${!OPTIONS[@]}"; do
+    ref="${OPTIONS[$i]}"
+    label="$ref"
+    if [ "$ref" = "main" ]; then
+        label="main (branch tip)"
+    fi
+    if [ -n "$CURRENT_VERSION" ] && { [ "$ref" = "v$CURRENT_VERSION" ] || [ "$ref" = "$CURRENT_VERSION" ]; }; then
+        label="$label [installed]"
+    fi
+    printf "%2d) %s\n" "$((i + 1))" "$label"
+done
+
+echo
+read -r -p "Choose a version to install (or q to quit): " CHOICE
+if [ "$CHOICE" = "q" ] || [ "$CHOICE" = "Q" ]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+if ! [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
+    echo "Invalid selection."
+    exit 1
+fi
+
+INDEX=$((CHOICE - 1))
+if [ "$INDEX" -lt 0 ] || [ "$INDEX" -ge "${#OPTIONS[@]}" ]; then
+    echo "Selection out of range."
+    exit 1
+fi
+
+SELECTED_REF="${OPTIONS[$INDEX]}"
+echo
+echo "Selected: $SELECTED_REF"
+read -r -p "Install this version now? [y/N] " CONFIRM
+if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+TMP_INSTALLER="$(mktemp /tmp/wifi-optimizer-install.XXXXXX.sh)"
+cleanup() {
+    rm -f "$TMP_INSTALLER"
+}
+trap cleanup EXIT
+
+echo
+echo "Downloading installer..."
+curl -fsSL "$INSTALL_URL" -o "$TMP_INSTALLER"
+
+echo "Running installer for ref: $SELECTED_REF"
+sudo WIFI_OPTIMIZER_REF="$SELECTED_REF" bash "$TMP_INSTALLER"
+
+NEW_VERSION="$(read_installed_version)"
+echo
+if [ -n "$NEW_VERSION" ]; then
+    echo "Installed version is now: v$NEW_VERSION"
+else
+    echo "Install completed. Could not determine installed version."
+fi
