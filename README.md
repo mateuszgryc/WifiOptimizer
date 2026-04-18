@@ -38,6 +38,20 @@ Switch back to Game Mode. Open the Quick Access Menu (**...** button) > Decky > 
 
 **Difference from upstream:** the original project included an in-app updater. This fork intentionally disables that feature so the plugin cannot replace its own root-running code from GitHub.
 
+### Manual update process
+
+1. Review the changes in this fork and decide which commit or branch tip you want to install.
+2. On the Steam Deck, open Desktop Mode > Konsole.
+3. Re-run the installer from this fork:
+
+```bash
+curl -sL https://github.com/mateuszgryc/WifiOptimizer/raw/main/install.sh -o /tmp/wifi-opt-install.sh && sudo bash /tmp/wifi-opt-install.sh
+```
+
+4. Open Decky again in Game Mode and confirm the plugin version and behavior.
+
+The installer preserves the plugin directory and replaces the installed files with the version from this fork. Because updates are manual, you control when the plugin changes.
+
 ## Getting started
 
 1. Open WiFi Optimizer from the Decky sidebar
