@@ -4,6 +4,18 @@
 
 A [Decky Loader](https://decky.xyz/) plugin for Steam Deck that fixes WiFi problems that cause lag, stuttering, and dropped connections during game streaming. Benefits any streaming over WiFi - Steam Remote Play, [Moonlight](https://moonlight-stream.org/) / [Sunshine](https://app.lizardbyte.dev/Sunshine/), Parsec, Chiaki, and more. Works on both Steam Deck LCD and OLED.
 
+## About this fork
+
+This fork keeps the WiFi tuning behavior from the original project, but removes the in-app updater and update UI.
+
+Why:
+
+- This plugin runs with root privileges inside Decky.
+- The original project could download and replace plugin code from GitHub at runtime.
+- For a root plugin, that creates a larger supply-chain risk than necessary.
+
+This fork is intended for people who want the WiFi fixes without a built-in remote update path. Updates are manual: review the repo, then reinstall from a known commit or release.
+
 ## The problem
 
 SteamOS resets WiFi settings after every system update and sleep/wake cycle. Power management gets re-enabled and network buffers reset to defaults. The result: latency spikes, connection drops, and degraded streaming quality - and the only fix is a trip to Desktop Mode.
@@ -15,16 +27,16 @@ WiFi Optimizer fixes this from Game Mode. One tap, and it stays fixed.
 [Decky Loader](https://decky.xyz/) must be installed first. Then open Desktop Mode > Konsole and run:
 
 ```bash
-curl -sL https://github.com/ArcadaLabs-Jason/WifiOptimizer/raw/main/install.sh -o /tmp/wifi-opt-install.sh && sudo bash /tmp/wifi-opt-install.sh
+curl -sL https://github.com/mateuszgryc/WifiOptimizer/raw/main/install.sh -o /tmp/wifi-opt-install.sh && sudo bash /tmp/wifi-opt-install.sh
 ```
 
 This requires a user password - set one with `passwd` in Konsole if you haven't already.
 
 Switch back to Game Mode. Open the Quick Access Menu (**...** button) > Decky > WiFi Optimizer.
 
-**Updating:** The plugin checks for updates automatically when you open it. If an update is available, an update button appears at the top of the panel - tap it and the plugin updates and restarts itself. You can also update manually by running the install command above again.
+**Updating:** This fork does not check for or install updates from inside Decky. To update, manually rerun the install command above after reviewing the changes you want to install.
 
-> **Note:** If you're on a version before v0.6.6, the in-app updater had bugs. Please update manually using the install command above to get working auto-updates.
+**Difference from upstream:** the original project included an in-app updater. This fork intentionally disables that feature so the plugin cannot replace its own root-running code from GitHub.
 
 ## Getting started
 
@@ -97,7 +109,7 @@ sudo systemctl restart plugin_loader
 Requires Node.js and pnpm v9.
 
 ```bash
-git clone https://github.com/ArcadaLabs-Jason/WifiOptimizer.git
+git clone https://github.com/mateuszgryc/WifiOptimizer.git
 cd WifiOptimizer
 pnpm i
 pnpm run build
