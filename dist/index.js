@@ -95,9 +95,6 @@ const setBufferTuning = callable("set_buffer_tuning");
 const optimizeSafe = callable("optimize_safe");
 const reapplyAll = callable("reapply_all");
 const resetSettings = callable("reset_settings");
-const setUpdateChannel = callable("set_update_channel");
-const checkForUpdate = callable("check_for_update");
-const applyUpdate = callable("apply_update");
 const startBackendSwitch = callable("start_backend_switch");
 const getBackendSwitchStatus = callable("get_backend_switch_status");
 
@@ -371,22 +368,6 @@ function BackendToggleRow({ status, backendSwitch, error, isBusy, onToggle, }) {
         })() }));
 }
 
-const CHANNEL_OPTIONS = [
-    { data: "stable", label: "Stable" },
-    { data: "beta", label: "Beta" },
-];
-// The Updates panel section: channel selector, optional warning text for a
-// stuck / failed update, and a button that context-switches between
-// "Updating...", "Update Now", "Up to date", and "Check for Updates"
-// depending on state.
-function UpdatesSection({ channel, updating, checkingUpdate, updateInfo, updateError, onChannelChange, onApply, onCheck, }) {
-    return (SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Update channel", rgOptions: CHANNEL_OPTIONS, selectedOption: channel, onChange: (option) => onChannelChange(option.data) }) }), updateError && !updating && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.body, color: theme.warning.text }, children: ["\u26A0 ", updateError] }) })), updating ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.body, color: theme.info.text }, children: "Updating... plugin will restart momentarily." }) })) : updateInfo?.update_available ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.body, color: theme.success.text }, children: ["v", updateInfo.latest_version, " available (you have v", updateInfo.current_version, ")"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: onApply, children: "Update Now" }) })] })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [updateInfo && updateInfo.success === false && updateInfo.message && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.tiny, color: theme.error.text }, children: updateInfo.message }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: checkingUpdate, onClick: onCheck, children: checkingUpdate
-                                ? "Checking..."
-                                : updateInfo?.success && !updateInfo?.update_available
-                                    ? "Up to date"
-                                    : "Check for Updates" }) })] }))] }));
-}
-
 // Format a Unix-seconds timestamp as a relative-time string for display in
 // the panel header ("just now", "5 min ago", "2 hr ago", "3d ago"). Returns
 // "never" for the sentinel value 0 (settings not yet applied).
@@ -427,7 +408,7 @@ function PanelFooter({ version }) {
         fontSize: theme.fontSize.tiny,
         color: theme.text.dim,
     };
-    return (SP_JSX.jsxs(DFL.PanelSection, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: rowStyle, children: ["v", version, " - by jasonridesabike"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: rowStyle, children: ["If WiFi won't reconnect, a reboot usually fixes it.", SP_JSX.jsx("br", {}), "Bugs? Report at github.com/ArcadaLabs-Jason/WifiOptimizer"] }) })] }));
+    return (SP_JSX.jsxs(DFL.PanelSection, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: rowStyle, children: ["v", version, " - by jasonridesabike"] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: rowStyle, children: ["If WiFi won't reconnect, a reboot usually fixes it.", SP_JSX.jsx("br", {}), "Hardened fork: github.com/mateuszgryc/WifiOptimizer"] }) })] }));
 }
 
 // Bottom-panel action buttons. Force Reapply re-runs every enabled
@@ -441,9 +422,6 @@ function ActionsSection({ connected, supported, isBusy, onForceReapply, onReset,
 const REFRESH_INTERVAL = 3000;
 const RECONNECT_DELAY = 4000;
 const BACKEND_POLL_INTERVAL = 750;
-const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
-const UPDATE_CHECK_DEDUPE_MS = 60 * 1000;
-const UPDATE_TIMEOUT_MS = 60 * 1000;
 function getBadge(driftKey, status, errorKey) {
     // Only surface a badge when it tells the user something the toggle position
     // doesn't - failure or drift between our setting and the system state.
@@ -477,7 +455,7 @@ class ErrorBoundary extends SP_REACT.Component {
     }
     render() {
         if (this.state.err) {
-            return (SP_JSX.jsx(Banner, { variant: "error", children: "WiFi Optimizer hit an unexpected error. Close and reopen the panel to recover. If it keeps happening, please report at github.com/ArcadaLabs-Jason/WifiOptimizer." }));
+            return (SP_JSX.jsx(Banner, { variant: "error", children: "WiFi Optimizer hit an unexpected error. Close and reopen the panel to recover. If it keeps happening, please report at github.com/mateuszgryc/WifiOptimizer." }));
         }
         return this.props.children;
     }
@@ -486,10 +464,9 @@ class ErrorBoundary extends SP_REACT.Component {
 // every section reads from shared state and state setters are passed down to
 // leaf components. Organized top-to-bottom as:
 //   1. State and refs
-//   2. Stable callbacks (setBusy, runUpdateCheck, refreshStatus, poll helpers)
-//   3. Lifecycle effects (main refresh, init, connectivity retry, update timeout,
-//      update heartbeat)
-//   4. User action handlers (toggles, optimize, reset, backend switch, updates)
+//   2. Stable callbacks (setBusy, refreshStatus, poll helpers)
+//   3. Lifecycle effects (main refresh and backend poll resume)
+//   4. User action handlers (toggles, optimize, reset, backend switch)
 //   5. Derived render state (connected, supported, allSafeActive, etc.)
 //   6. JSX for the panel sections in top-to-bottom screen order
 function Content() {
@@ -500,11 +477,6 @@ function Content() {
     const [applyingAll, setApplyingAll] = SP_REACT.useState(false);
     const [optimizeResult, setOptimizeResult] = SP_REACT.useState(null);
     const [customDnsInput, setCustomDnsInput] = SP_REACT.useState("");
-    // --- Update flow state ---
-    const [updateInfo, setUpdateInfo] = SP_REACT.useState(null);
-    const [checkingUpdate, setCheckingUpdate] = SP_REACT.useState(false);
-    const [updating, setUpdating] = SP_REACT.useState(false);
-    const [updateError, setUpdateError] = SP_REACT.useState(null);
     // --- Backend switch state ---
     const [backendSwitch, setBackendSwitch] = SP_REACT.useState(null);
     // --- Refs ---
@@ -512,22 +484,9 @@ function Content() {
     // state mirror so UI can respond. setBusy below writes both together.
     const busyRef = SP_REACT.useRef(false);
     const backendPollRef = SP_REACT.useRef(null);
-    const prevConnectedRef = SP_REACT.useRef(null);
-    const lastUpdateCheckAtRef = SP_REACT.useRef(0);
     const setBusy = SP_REACT.useCallback((val) => {
         busyRef.current = val;
         setIsBusy(val);
-    }, []);
-    // Runs checkForUpdate with dedupe - skips if a check was issued within the
-    // dedupe window. Lowers GitHub API pressure in CGNAT/dorm scenarios where
-    // many Decks share an IP. Manual button bypasses this (force=true).
-    const runUpdateCheck = SP_REACT.useCallback((force = false) => {
-        const now = Date.now();
-        if (!force && now - lastUpdateCheckAtRef.current < UPDATE_CHECK_DEDUPE_MS) {
-            return;
-        }
-        lastUpdateCheckAtRef.current = now;
-        checkForUpdate().then(setUpdateInfo).catch(() => { });
     }, []);
     const refreshStatus = SP_REACT.useCallback(async (force = false) => {
         // Background interval ticks defer while a user operation is in flight;
@@ -620,13 +579,9 @@ function Content() {
             stop();
         };
     }, [refreshStatus]);
-    // One-time init: initial update check and resume backend polling if a switch
-    // was already in flight when the panel opened.
+    // One-time init: resume backend polling if a switch was already in flight
+    // when the panel opened.
     SP_REACT.useEffect(() => {
-        // Initial update check. If it fails (e.g., no network yet), the effect
-        // below retries on connectivity recovery. QAM tends to cache the panel
-        // across close/open, so we can't rely on remount to retry.
-        runUpdateCheck();
         // Resume backend-switch polling if one is in flight (panel was reopened mid-switch)
         getBackendSwitchStatus()
             .then((s) => {
@@ -641,70 +596,7 @@ function Content() {
             if (backendPollRef.current)
                 clearInterval(backendPollRef.current);
         };
-    }, [beginBackendPoll, runUpdateCheck, setBusy]);
-    // Retry update check when connectivity recovers. The initial one-shot check
-    // in the mount effect misses the case where the panel was already open when
-    // the network came back. Skip until status has loaded to avoid a spurious
-    // null-to-true transition firing an extra check on every mount.
-    SP_REACT.useEffect(() => {
-        if (!status)
-            return;
-        const connected = status.connected;
-        const prev = prevConnectedRef.current;
-        prevConnectedRef.current = connected;
-        if (prev === false && connected === true) {
-            runUpdateCheck();
-        }
-    }, [status?.connected, runUpdateCheck]);
-    // Safety timeout: if an update was initiated but plugin_loader hasn't killed
-    // us within 60s, the detached update script probably failed (network drop,
-    // tarball corruption, etc.). Revert the UI so the user isn't stuck staring
-    // at "Updating..." forever, and surface a message they can act on.
-    SP_REACT.useEffect(() => {
-        if (!updating)
-            return;
-        const id = setTimeout(() => {
-            console.error("WiFi Optimizer: update didn't complete within 60s");
-            setUpdating(false);
-            setUpdateError("Update didn't complete. Try again, or reinstall manually from Konsole.");
-        }, UPDATE_TIMEOUT_MS);
-        return () => clearTimeout(id);
-    }, [updating]);
-    // Periodic update re-check - QAM often caches the panel across close/reopen,
-    // so the mount-effect check doesn't re-fire. This heartbeat catches new
-    // releases when the panel has been left open for a while. Paused when the
-    // panel/tab is hidden to avoid pointless GitHub calls accumulating while the
-    // user isn't looking; re-fires one check immediately on visibility return.
-    SP_REACT.useEffect(() => {
-        let id = null;
-        const start = () => {
-            if (id)
-                return;
-            id = setInterval(() => runUpdateCheck(), UPDATE_CHECK_INTERVAL);
-        };
-        const stop = () => {
-            if (id) {
-                clearInterval(id);
-                id = null;
-            }
-        };
-        const onVis = () => {
-            if (document.hidden) {
-                stop();
-            }
-            else {
-                runUpdateCheck();
-                start();
-            }
-        };
-        if (!document.hidden)
-            start();
-        document.addEventListener("visibilitychange", onVis);
-        return () => {
-            document.removeEventListener("visibilitychange", onVis);
-            stop();
-        };
-    }, [runUpdateCheck]);
+    }, [beginBackendPoll, setBusy]);
     // ---- User action handlers ----
     //
     // Generic toggle handler used by every setter toggle (power_save, BSSID,
@@ -837,37 +729,6 @@ function Content() {
             console.error("startBackendSwitch error", e);
         }
     };
-    // Update-flow handlers, used by the top update banner and the Updates
-    // section. Share the updating/updateError state so either surface can
-    // initiate a check or apply an update.
-    const handleApplyUpdate = async () => {
-        setUpdateError(null);
-        setUpdating(true);
-        try {
-            await applyUpdate();
-        }
-        catch {
-            // plugin_loader restart killed the connection; expected
-        }
-    };
-    const handleCheckForUpdate = async () => {
-        setCheckingUpdate(true);
-        setUpdateError(null);
-        lastUpdateCheckAtRef.current = Date.now();
-        try {
-            const result = await checkForUpdate();
-            setUpdateInfo(result);
-        }
-        catch {
-            // refreshStatus has its own catch; no need to log here
-        }
-        setCheckingUpdate(false);
-    };
-    const handleChannelChange = async (nextChannel) => {
-        await setUpdateChannel(nextChannel);
-        setUpdateInfo(null);
-        await refreshStatus();
-    };
     // Don't render content until first status arrives (prevents disconnect flash)
     if (!status) {
         return SP_JSX.jsx(DFL.PanelSection, { title: "WiFi Optimizer" });
@@ -886,7 +747,7 @@ function Content() {
         status?.live?.dispatcher_installed &&
         status?.live?.buffer_tuning_applied &&
         !status?.drift?.buffer_tuning;
-    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(PanelHeader, { model: s?.model ?? "unknown", driver: s?.driver ?? "", version: status?.version ?? "?", lastApplied: s?.last_applied ?? 0, lastEnforced: status?.live?.last_enforced }), !supported && (SP_JSX.jsx(Banner, { variant: "error", children: "This plugin is designed for Steam Deck only. Unsupported device detected." })), updateInfo?.update_available && !updating && (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", onClick: handleApplyUpdate, children: ["Update to v", updateInfo.latest_version] }) }) })), updating && (SP_JSX.jsx(DFL.PanelSection, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: theme.fontSize.body, color: theme.info.text }, children: "Updating... plugin will restart momentarily." }) }) })), connected && !s?.last_applied && (SP_JSX.jsxs(Banner, { variant: "info", children: ["Tap ", SP_JSX.jsx("strong", { children: "Optimize Safe" }), " to get started."] })), connected && !!s?.last_applied && driftCount > 0 && (SP_JSX.jsxs(Banner, { variant: "warning", icon: "\u26A0", children: [driftCount, " setting", driftCount > 1 ? "s" : "", " drifted after wake.", " ", SP_JSX.jsx("span", { style: { textDecoration: "underline", cursor: "pointer" }, onClick: handleOptimize, children: "Fix now" })] })), !connected && (SP_JSX.jsx(Banner, { variant: "error", icon: "\u2715", children: "Not connected to WiFi. Connect first, then optimize." })), backendSwitch && !backendSwitch.in_progress && backendSwitch.result && (() => {
+    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(PanelHeader, { model: s?.model ?? "unknown", driver: s?.driver ?? "", version: status?.version ?? "?", lastApplied: s?.last_applied ?? 0, lastEnforced: status?.live?.last_enforced }), !supported && (SP_JSX.jsx(Banner, { variant: "error", children: "This plugin is designed for Steam Deck only. Unsupported device detected." })), connected && !s?.last_applied && (SP_JSX.jsxs(Banner, { variant: "info", children: ["Tap ", SP_JSX.jsx("strong", { children: "Optimize Safe" }), " to get started."] })), connected && !!s?.last_applied && driftCount > 0 && (SP_JSX.jsxs(Banner, { variant: "warning", icon: "\u26A0", children: [driftCount, " setting", driftCount > 1 ? "s" : "", " drifted after wake.", " ", SP_JSX.jsx("span", { style: { textDecoration: "underline", cursor: "pointer" }, onClick: handleOptimize, children: "Fix now" })] })), !connected && (SP_JSX.jsx(Banner, { variant: "error", icon: "\u2715", children: "Not connected to WiFi. Connect first, then optimize." })), backendSwitch && !backendSwitch.in_progress && backendSwitch.result && (() => {
                 const r = backendSwitch.result;
                 // Treat reconnect timeout as a warning even when the backend-level
                 // switch succeeded - the system is switched but WiFi didn't come back.
@@ -920,7 +781,7 @@ function Content() {
                                             if (customDnsInput) {
                                                 handleToggle("dns", () => setDns(true, "custom", customDnsInput));
                                             }
-                                        } }) }))] })) }), SP_JSX.jsx(InfoRow, { label: "Disable IPv6", subtitle: "Use IPv4 only on this network", explanation: "Some networks have poor or misconfigured IPv6 support, which can cause slow DNS resolution, connection timeouts, or routing issues. Disabling IPv6 forces all traffic through IPv4. Only enable this if you're experiencing issues - most modern networks handle IPv6 fine.", ...getBadge(undefined, status, errors.ipv6 ?? null), checked: s?.ipv6_disabled ?? false, disabled: isBusy || (!connected && !s?.ipv6_disabled), error: errors.ipv6, onChange: (val) => handleToggle("ipv6", () => setIpv6(val)) }), supported && status?.live?.backend_tool_available && (SP_JSX.jsx(BackendToggleRow, { status: status, backendSwitch: backendSwitch, error: errors.wifi_backend, isBusy: isBusy, onToggle: handleBackendToggle }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Live status", children: [connected && status?.live?.ip_address && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.tertiary }, children: ["IP: ", status.live.ip_address] }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(StatsGrid, { live: status?.live ?? {}, connected: connected }) })] }), SP_JSX.jsx(ActionsSection, { connected: connected, supported: supported, isBusy: isBusy, onForceReapply: handleForceReapply, onReset: handleResetSettings }), SP_JSX.jsx(UpdatesSection, { channel: s?.update_channel ?? "stable", updating: updating, checkingUpdate: checkingUpdate, updateInfo: updateInfo, updateError: updateError, onChannelChange: handleChannelChange, onApply: handleApplyUpdate, onCheck: handleCheckForUpdate }), SP_JSX.jsx(PanelFooter, { version: status?.version ?? "?" })] }));
+                                        } }) }))] })) }), SP_JSX.jsx(InfoRow, { label: "Disable IPv6", subtitle: "Use IPv4 only on this network", explanation: "Some networks have poor or misconfigured IPv6 support, which can cause slow DNS resolution, connection timeouts, or routing issues. Disabling IPv6 forces all traffic through IPv4. Only enable this if you're experiencing issues - most modern networks handle IPv6 fine.", ...getBadge(undefined, status, errors.ipv6 ?? null), checked: s?.ipv6_disabled ?? false, disabled: isBusy || (!connected && !s?.ipv6_disabled), error: errors.ipv6, onChange: (val) => handleToggle("ipv6", () => setIpv6(val)) }), supported && status?.live?.backend_tool_available && (SP_JSX.jsx(BackendToggleRow, { status: status, backendSwitch: backendSwitch, error: errors.wifi_backend, isBusy: isBusy, onToggle: handleBackendToggle }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "Live status", children: [connected && status?.live?.ip_address && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: theme.fontSize.tiny, color: theme.text.tertiary }, children: ["IP: ", status.live.ip_address] }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(StatsGrid, { live: status?.live ?? {}, connected: connected }) })] }), SP_JSX.jsx(ActionsSection, { connected: connected, supported: supported, isBusy: isBusy, onForceReapply: handleForceReapply, onReset: handleResetSettings }), SP_JSX.jsx(PanelFooter, { version: status?.version ?? "?" })] }));
 }
 var index = definePlugin(() => {
     return {

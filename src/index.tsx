@@ -23,7 +23,6 @@ import type {
   PluginStatus,
   MethodResult,
   OptimizeSafeResult,
-  UpdateCheckResult,
   BadgeStatus,
   BackendSwitchStatus,
 } from "./types";
@@ -32,7 +31,6 @@ import { InfoRow } from "./components/InfoRow";
 import { StatsGrid } from "./components/StatsGrid";
 import { Banner } from "./components/Banner";
 import { BackendToggleRow } from "./components/BackendToggleRow";
-import { UpdatesSection } from "./components/UpdatesSection";
 import { PanelHeader } from "./components/PanelHeader";
 import { PanelFooter } from "./components/PanelFooter";
 import { ActionsSection } from "./components/ActionsSection";
@@ -41,9 +39,6 @@ import { theme } from "./theme";
 const REFRESH_INTERVAL = 3000;
 const RECONNECT_DELAY = 4000;
 const BACKEND_POLL_INTERVAL = 750;
-const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000;
-const UPDATE_CHECK_DEDUPE_MS = 60 * 1000;
-const UPDATE_TIMEOUT_MS = 60 * 1000;
 
 function getBadge(
   driftKey: string | undefined,
@@ -89,7 +84,7 @@ class ErrorBoundary extends Component<
         <Banner variant="error">
           WiFi Optimizer hit an unexpected error. Close and reopen the panel to
           recover. If it keeps happening, please report at
-          github.com/ArcadaLabs-Jason/WifiOptimizer.
+          github.com/mateuszgryc/WifiOptimizer.
         </Banner>
       );
     }
@@ -101,10 +96,9 @@ class ErrorBoundary extends Component<
 // every section reads from shared state and state setters are passed down to
 // leaf components. Organized top-to-bottom as:
 //   1. State and refs
-//   2. Stable callbacks (setBusy, runUpdateCheck, refreshStatus, poll helpers)
-//   3. Lifecycle effects (main refresh, init, connectivity retry, update timeout,
-//      update heartbeat)
-//   4. User action handlers (toggles, optimize, reset, backend switch, updates)
+//   2. Stable callbacks (setBusy, refreshStatus, poll helpers)
+//   3. Lifecycle effects (main refresh and backend poll resume)
+//   4. User action handlers (toggles, optimize, reset, backend switch)
 //   5. Derived render state (connected, supported, allSafeActive, etc.)
 //   6. JSX for the panel sections in top-to-bottom screen order
 function Content() {
@@ -116,12 +110,6 @@ function Content() {
   const [optimizeResult, setOptimizeResult] = useState<OptimizeSafeResult | null>(null);
   const [customDnsInput, setCustomDnsInput] = useState("");
 
-  // --- Update flow state ---
-  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [updateError, setUpdateError] = useState<string | null>(null);
-
   // --- Backend switch state ---
   const [backendSwitch, setBackendSwitch] = useState<BackendSwitchStatus | null>(null);
 
@@ -130,24 +118,10 @@ function Content() {
   // state mirror so UI can respond. setBusy below writes both together.
   const busyRef = useRef(false);
   const backendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const prevConnectedRef = useRef<boolean | null>(null);
-  const lastUpdateCheckAtRef = useRef<number>(0);
 
   const setBusy = useCallback((val: boolean) => {
     busyRef.current = val;
     setIsBusy(val);
-  }, []);
-
-  // Runs checkForUpdate with dedupe - skips if a check was issued within the
-  // dedupe window. Lowers GitHub API pressure in CGNAT/dorm scenarios where
-  // many Decks share an IP. Manual button bypasses this (force=true).
-  const runUpdateCheck = useCallback((force: boolean = false) => {
-    const now = Date.now();
-    if (!force && now - lastUpdateCheckAtRef.current < UPDATE_CHECK_DEDUPE_MS) {
-      return;
-    }
-    lastUpdateCheckAtRef.current = now;
-    backend.checkForUpdate().then(setUpdateInfo).catch(() => {});
   }, []);
 
   const refreshStatus = useCallback(async (force: boolean = false) => {
@@ -238,13 +212,9 @@ function Content() {
     };
   }, [refreshStatus]);
 
-  // One-time init: initial update check and resume backend polling if a switch
-  // was already in flight when the panel opened.
+  // One-time init: resume backend polling if a switch was already in flight
+  // when the panel opened.
   useEffect(() => {
-    // Initial update check. If it fails (e.g., no network yet), the effect
-    // below retries on connectivity recovery. QAM tends to cache the panel
-    // across close/open, so we can't rely on remount to retry.
-    runUpdateCheck();
     // Resume backend-switch polling if one is in flight (panel was reopened mid-switch)
     backend
       .getBackendSwitchStatus()
@@ -259,70 +229,7 @@ function Content() {
     return () => {
       if (backendPollRef.current) clearInterval(backendPollRef.current);
     };
-  }, [beginBackendPoll, runUpdateCheck, setBusy]);
-
-  // Retry update check when connectivity recovers. The initial one-shot check
-  // in the mount effect misses the case where the panel was already open when
-  // the network came back. Skip until status has loaded to avoid a spurious
-  // null-to-true transition firing an extra check on every mount.
-  useEffect(() => {
-    if (!status) return;
-    const connected = status.connected;
-    const prev = prevConnectedRef.current;
-    prevConnectedRef.current = connected;
-    if (prev === false && connected === true) {
-      runUpdateCheck();
-    }
-  }, [status?.connected, runUpdateCheck]);
-
-  // Safety timeout: if an update was initiated but plugin_loader hasn't killed
-  // us within 60s, the detached update script probably failed (network drop,
-  // tarball corruption, etc.). Revert the UI so the user isn't stuck staring
-  // at "Updating..." forever, and surface a message they can act on.
-  useEffect(() => {
-    if (!updating) return;
-    const id = setTimeout(() => {
-      console.error("WiFi Optimizer: update didn't complete within 60s");
-      setUpdating(false);
-      setUpdateError(
-        "Update didn't complete. Try again, or reinstall manually from Konsole."
-      );
-    }, UPDATE_TIMEOUT_MS);
-    return () => clearTimeout(id);
-  }, [updating]);
-
-  // Periodic update re-check - QAM often caches the panel across close/reopen,
-  // so the mount-effect check doesn't re-fire. This heartbeat catches new
-  // releases when the panel has been left open for a while. Paused when the
-  // panel/tab is hidden to avoid pointless GitHub calls accumulating while the
-  // user isn't looking; re-fires one check immediately on visibility return.
-  useEffect(() => {
-    let id: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (id) return;
-      id = setInterval(() => runUpdateCheck(), UPDATE_CHECK_INTERVAL);
-    };
-    const stop = () => {
-      if (id) {
-        clearInterval(id);
-        id = null;
-      }
-    };
-    const onVis = () => {
-      if (document.hidden) {
-        stop();
-      } else {
-        runUpdateCheck();
-        start();
-      }
-    };
-    if (!document.hidden) start();
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      stop();
-    };
-  }, [runUpdateCheck]);
+  }, [beginBackendPoll, setBusy]);
 
   // ---- User action handlers ----
   //
@@ -455,38 +362,6 @@ function Content() {
     }
   };
 
-  // Update-flow handlers, used by the top update banner and the Updates
-  // section. Share the updating/updateError state so either surface can
-  // initiate a check or apply an update.
-  const handleApplyUpdate = async () => {
-    setUpdateError(null);
-    setUpdating(true);
-    try {
-      await backend.applyUpdate();
-    } catch {
-      // plugin_loader restart killed the connection; expected
-    }
-  };
-
-  const handleCheckForUpdate = async () => {
-    setCheckingUpdate(true);
-    setUpdateError(null);
-    lastUpdateCheckAtRef.current = Date.now();
-    try {
-      const result = await backend.checkForUpdate();
-      setUpdateInfo(result);
-    } catch {
-      // refreshStatus has its own catch; no need to log here
-    }
-    setCheckingUpdate(false);
-  };
-
-  const handleChannelChange = async (nextChannel: string) => {
-    await backend.setUpdateChannel(nextChannel);
-    setUpdateInfo(null);
-    await refreshStatus();
-  };
-
   // Don't render content until first status arrives (prevents disconnect flash)
   if (!status) {
     return <PanelSection title="WiFi Optimizer" />;
@@ -524,28 +399,6 @@ function Content() {
         <Banner variant="error">
           This plugin is designed for Steam Deck only. Unsupported device detected.
         </Banner>
-      )}
-
-      {/* Update available */}
-      {updateInfo?.update_available && !updating && (
-        <PanelSection>
-          <PanelSectionRow>
-            <ButtonItem layout="below" onClick={handleApplyUpdate}>
-              Update to v{updateInfo.latest_version}
-            </ButtonItem>
-          </PanelSectionRow>
-        </PanelSection>
-      )}
-
-      {/* Updating */}
-      {updating && (
-        <PanelSection>
-          <PanelSectionRow>
-            <div style={{ fontSize: theme.fontSize.body, color: theme.info.text }}>
-              Updating... plugin will restart momentarily.
-            </div>
-          </PanelSectionRow>
-        </PanelSection>
       )}
 
       {/* First-run prompt */}
@@ -794,17 +647,6 @@ function Content() {
         isBusy={isBusy}
         onForceReapply={handleForceReapply}
         onReset={handleResetSettings}
-      />
-
-      <UpdatesSection
-        channel={s?.update_channel ?? "stable"}
-        updating={updating}
-        checkingUpdate={checkingUpdate}
-        updateInfo={updateInfo}
-        updateError={updateError}
-        onChannelChange={handleChannelChange}
-        onApply={handleApplyUpdate}
-        onCheck={handleCheckForUpdate}
       />
 
       <PanelFooter version={status?.version ?? "?"} />

@@ -102,17 +102,6 @@ export interface BackendSwitchStartResult {
   backend?: string;
 }
 
-export interface UpdateCheckResult {
-  success: boolean;
-  current_version?: string;
-  latest_version?: string;
-  update_available?: boolean;
-  channel?: string;
-  release_url?: string;
-  error?: string;
-  message?: string;
-}
-
 export type BadgeStatus = "active" | "locked" | "set" | "drifted" | "off" | "error" | "unknown";
 
 export const ERROR_MESSAGES: Record<string, string> = {

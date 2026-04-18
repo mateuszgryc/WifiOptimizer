@@ -1283,183 +1283,29 @@ class Plugin:
     # ---- Updates ----
 
     async def set_update_channel(self, channel: str) -> dict:
-        """Set the update channel to 'stable' or 'beta'."""
-        try:
-            if channel not in ("stable", "beta"):
-                return {"success": False, "message": "Channel must be 'stable' or 'beta'"}
-            settings = _load_settings()
-            settings["update_channel"] = channel
-            _save_settings(settings)
-            decky.logger.info(f"Update channel set to {channel}")
-            return {"success": True, "channel": channel}
-        except Exception as e:
-            decky.logger.error(f"set_update_channel error: {e}")
-            return self._unexpected_response(e)
+        """Updater is intentionally disabled in the hardened fork."""
+        return {
+            "success": False,
+            "error": "unexpected",
+            "message": "In-app updates are disabled in this security-hardened build.",
+        }
 
     async def check_for_update(self) -> dict:
-        """Check GitHub for a newer version (stable release or beta branch)."""
-        try:
-            current = decky.DECKY_PLUGIN_VERSION
-            settings = _load_settings()
-            channel = settings.get("update_channel", "stable")
-            decky.logger.info(f"Update check: current={current}, channel={channel}")
-
-            if channel == "beta":
-                # Use the GitHub contents API instead of raw.githubusercontent.com
-                # to bypass raw's CDN cache (typical 5-15 min TTL), which made
-                # beta updates appear unavailable immediately after a push.
-                # The `Accept: ...raw` header tells the API to return the file
-                # content directly instead of base64-wrapped JSON.
-                result = self._run_cmd(
-                    [
-                        "/usr/bin/curl", "-sL", "--max-time", "10",
-                        "-H", "Accept: application/vnd.github.raw+json",
-                        "https://api.github.com/repos/ArcadaLabs-Jason/WifiOptimizer/contents/package.json?ref=beta",
-                    ],
-                    timeout=15,
-                    clean_env=True,
-                )
-            else:
-                # Fetch latest release
-                result = self._run_cmd(
-                    [
-                        "/usr/bin/curl", "-sL", "--max-time", "10",
-                        "-H", "Accept: application/vnd.github.v3+json",
-                        "https://api.github.com/repos/ArcadaLabs-Jason/WifiOptimizer/releases/latest",
-                    ],
-                    timeout=15,
-                    clean_env=True,
-                )
-
-            if not result["success"] or not result["stdout"]:
-                decky.logger.error(f"Update check: curl failed - rc={result.get('returncode')}, stderr={result.get('stderr', '')[:200]}")
-                return {
-                    "success": False,
-                    "current_version": current,
-                    "update_available": False,
-                    "channel": channel,
-                    "message": "Couldn't reach GitHub",
-                }
-
-            data = json.loads(result["stdout"])
-
-            if channel == "beta":
-                latest = data.get("version", "")
-            else:
-                tag = data.get("tag_name", "")
-                latest = tag.lstrip("v")
-
-            if not latest:
-                msg = data.get("message", "couldn't parse version")
-                decky.logger.error(f"Update check: no version - {msg}")
-                return {
-                    "success": False,
-                    "current_version": current,
-                    "update_available": False,
-                    "channel": channel,
-                    "message": msg,
-                }
-
-            # Beta: update if versions differ (allows downgrade back to stable)
-            # Stable: update only if newer (strip -beta suffix for comparison)
-            if channel == "beta":
-                update_available = latest != current
-            else:
-                current_clean = current.split("-")[0]
-                latest_clean = latest.split("-")[0]
-                current_tuple = tuple(int(x) for x in current_clean.split("."))
-                latest_tuple = tuple(int(x) for x in latest_clean.split("."))
-                update_available = latest_tuple > current_tuple or "-beta" in current
-
-            decky.logger.info(f"Update check: current={current}, latest={latest}, channel={channel}, update={update_available}")
-
-            return {
-                "success": True,
-                "current_version": current,
-                "latest_version": latest,
-                "update_available": update_available,
-                "channel": channel,
-            }
-        except Exception as e:
-            decky.logger.error(f"check_for_update error: {e}")
-            return {
-                "success": False,
-                "current_version": decky.DECKY_PLUGIN_VERSION,
-                "update_available": False,
-                "message": str(e),
-            }
+        """Updater is intentionally disabled in the hardened fork."""
+        return {
+            "success": False,
+            "current_version": decky.DECKY_PLUGIN_VERSION,
+            "update_available": False,
+            "message": "In-app updates are disabled in this security-hardened build.",
+        }
 
     async def apply_update(self) -> dict:
-        """Download and install update from the selected channel, then restart Decky."""
-        try:
-            if not self._is_supported_device():
-                return {"success": False, "error": "unexpected", "message": "Unsupported device."}
-
-            info = await self.check_for_update()
-            if not info.get("update_available"):
-                return {"success": False, "message": "No update available."}
-
-            channel = info.get("channel", "stable")
-            latest = info["latest_version"]
-            plugin_dir = decky.DECKY_PLUGIN_DIR
-
-            if channel == "beta":
-                download_url = "https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/heads/beta.tar.gz"
-                src_dir = "WifiOptimizer-beta"
-                label = f"beta v{latest}"
-            else:
-                tag = f"v{latest}"
-                download_url = f"https://github.com/ArcadaLabs-Jason/WifiOptimizer/archive/refs/tags/{tag}.tar.gz"
-                src_dir = f"WifiOptimizer-{latest}"
-                label = f"v{latest}"
-
-            script = f"""#!/bin/bash
-sleep 2
-PLUGIN_DIR="{plugin_dir}"
-TMP=$(mktemp -d)
-cleanup() {{ rm -rf "$TMP"; rm -f "$0"; }}
-trap cleanup EXIT
-
-curl -sL "{download_url}" -o "$TMP/update.tar.gz"
-tar xzf "$TMP/update.tar.gz" -C "$TMP"
-SRC="$TMP/{src_dir}"
-
-if [ ! -f "$SRC/plugin.json" ]; then
-    logger -t wifi-optimizer "Update failed: download error"
-    exit 1
-fi
-
-cp "$SRC/plugin.json" "$PLUGIN_DIR/"
-cp "$SRC/package.json" "$PLUGIN_DIR/"
-cp "$SRC/main.py" "$PLUGIN_DIR/"
-cp "$SRC/decky.pyi" "$PLUGIN_DIR/"
-mkdir -p "$PLUGIN_DIR/dist" "$PLUGIN_DIR/defaults"
-cp "$SRC/dist/index.js" "$PLUGIN_DIR/dist/"
-cp "$SRC/dist/index.js.map" "$PLUGIN_DIR/dist/" 2>/dev/null || true
-cp "$SRC/defaults/dispatcher.sh.tmpl" "$PLUGIN_DIR/defaults/"
-
-logger -t wifi-optimizer "Updated to {label}, restarting plugin_loader"
-systemctl restart plugin_loader 2>/dev/null || true
-"""
-            script_path = "/tmp/wifi-optimizer-update.sh"
-            with open(script_path, "w") as f:
-                f.write(script)
-            os.chmod(script_path, 0o700)
-
-            clean_env = {k: v for k, v in os.environ.items() if k != "LD_LIBRARY_PATH"}
-            subprocess.Popen(
-                ["/bin/bash", script_path],
-                start_new_session=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=clean_env,
-            )
-
-            decky.logger.info(f"Update to {label} initiated (channel={channel})")
-            return {"success": True, "message": f"Updating to {label}..."}
-        except Exception as e:
-            decky.logger.error(f"apply_update error: {e}")
-            return self._unexpected_response(e)
+        """Updater is intentionally disabled in the hardened fork."""
+        return {
+            "success": False,
+            "error": "unexpected",
+            "message": "In-app updates are disabled in this security-hardened build.",
+        }
 
     # ---- WiFi backend switch (iwd / wpa_supplicant) ----
 
